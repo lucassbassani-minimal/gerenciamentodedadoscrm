@@ -11,3 +11,16 @@ Thumbs.db
 credentials/
 *.pem
 *.key
+*service_account*.json
+
+# Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+
+# Supabase local
+.supabase/
