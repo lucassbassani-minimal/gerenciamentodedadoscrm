@@ -240,9 +240,10 @@ def fetch_forms(client: httpx.Client) -> list[KlaviyoForm]:
     result = []
     for item in _paginate(client, "/forms/", {
         "fields[form]": "name,status,archived,form_type,created,updated",
-        "filter": "equals(archived,false)",
     }):
         a = item["attributes"]
+        if a.get("archived"):
+            continue
         result.append(KlaviyoForm.model_validate({
             "id": item["id"],
             "name": a["name"],
