@@ -957,18 +957,41 @@ async function renderChannel(key){
   document.getElementById('kpi-'+key).innerHTML =
     '<div style="grid-column:1/-1;color:var(--muted);padding:20px;text-align:center">Carregando dados...</div>';
 
-  // — Fetch real data for this channel —
   const {start, end} = getDateRange(document.getElementById('f-period').value);
+  const customerFilter = document.getElementById('f-customer').value;
   const dlabel = d => d.slice(5).replace('-','/');
-  let channelRows = [];
+  const comp = getComparisonPeriod(start, end);
+
+  let allRows = [], revByType = [], allCompRows = [], compRevByType = [];
+  let emailDaily = [], emailAssetRows = [];
   try {
-    const allRows = await fetchChannelData(start, end);
-    channelRows = allRows.filter(r => r.channel_slug === ch.slug);
+    const fetches = [
+      fetchChannelData(start, end),
+      fetchRevenueByType(start, end),
+      fetchChannelData(comp.start, comp.end),
+      fetchRevenueByType(comp.start, comp.end),
+    ];
+    if (isEmail) {
+      fetches.push(fetchEmailChannelDaily(ch.slug, start, end));
+      fetches.push(fetchEmailAssets(ch.slug));
+    }
+    const results = await Promise.all(fetches);
+    allRows = results[0]; revByType = results[1];
+    allCompRows = results[2]; compRevByType = results[3];
+    if (isEmail) { emailDaily = results[4]; emailAssetRows = results[5]; }
   } catch(err) {
     document.getElementById('kpi-'+key).innerHTML =
       `<div style="grid-column:1/-1;color:var(--danger);padding:20px">Erro ao carregar: ${err.message}</div>`;
     return;
   }
+
+  // Filtro de canal + tipo de cliente
+  const rawRows        = allRows.filter(r => r.channel_slug === ch.slug);
+  const rawRevByType   = revByType.filter(r => r.channel_slug === ch.slug);
+  const rawCompRows    = allCompRows.filter(r => r.channel_slug === ch.slug);
+  const rawCompRevByType = compRevByType.filter(r => r.channel_slug === ch.slug);
+  const channelRows    = _applyCustomerFilter(rawRows, rawRevByType, customerFilter);
+  const compRows       = _applyCustomerFilter(rawCompRows, rawCompRevByType, customerFilter);
 
   const totals = channelRows.reduce((a, r) => ({
     sessions:       a.sessions       + (r.sessions||0),
@@ -978,12 +1001,19 @@ async function renderChannel(key){
     revenue_brl:    a.revenue_brl    + parseFloat(r.revenue_brl||0),
   }), {sessions:0, add_to_cart:0, begin_checkout:0, orders:0, revenue_brl:0});
 
+  const compTotals = compRows.reduce((a, r) => ({
+    sessions:    a.sessions    + (r.sessions||0),
+    orders:      a.orders      + (r.orders||0),
+    revenue_brl: a.revenue_brl + parseFloat(r.revenue_brl||0),
+  }), {sessions:0, orders:0, revenue_brl:0});
+
   const s = {rev:totals.revenue_brl, purchases:totals.orders, sessions:totals.sessions,
               atc:totals.add_to_cart, bco:totals.begin_checkout};
 
-  const dates   = makeDateRange(start, end);
-  const dlabels = dates.map(dlabel);
-  const byDay   = {};
+  const dates     = makeDateRange(start, end);
+  const compDates = makeDateRange(comp.start, comp.end);
+  const dlabels   = dates.map(dlabel);
+  const byDay     = {};
   for (const r of channelRows) {
     const d = (r.date||'').slice(0,10);
     if (!byDay[d]) byDay[d] = {revenue_brl:0,orders:0,sessions:0,add_to_cart:0,begin_checkout:0};
@@ -993,16 +1023,15 @@ async function renderChannel(key){
     byDay[d].add_to_cart    += (r.add_to_cart||0);
     byDay[d].begin_checkout += (r.begin_checkout||0);
   }
-  const dailyRevData = dates.map(d => byDay[d]?.revenue_brl || 0);
-
-  // Para canais de e-mail: buscar métricas reais de disparos/aberturas/cliques
-  let emailDaily = [], emailAssetRows = [];
-  if (isEmail) {
-    [emailDaily, emailAssetRows] = await Promise.all([
-      fetchEmailChannelDaily(ch.slug, start, end),
-      fetchEmailAssets(ch.slug),
-    ]);
+  const compByDay = {};
+  for (const r of compRows) {
+    const d = (r.date||'').slice(0,10);
+    if (!compByDay[d]) compByDay[d] = {revenue_brl:0};
+    compByDay[d].revenue_brl += parseFloat(r.revenue_brl||0);
   }
+  const dailyRevData = dates.map(d => byDay[d]?.revenue_brl || 0);
+  const compRevData  = compDates.map(d => compByDay[d]?.revenue_brl || 0);
+
   const emByDay = {};
   for (const r of emailDaily) emByDay[(r.date||'').slice(0,10)] = r;
   const em = emailDaily.reduce((a,r) => ({
@@ -1014,9 +1043,12 @@ async function renderChannel(key){
   }), {sends:0, opens:0, clicks:0, bounces:0, unsubscribes:0});
 
   const safe = (a,b) => b>0 ? a/b : 0;
-  const ticket = safe(s.rev, s.purchases);
-  const conv   = safe(s.purchases, s.sessions);
-  const rps    = safe(s.rev, s.sessions);
+  const ticket     = safe(s.rev, s.purchases);
+  const conv       = safe(s.purchases, s.sessions);
+  const rps        = safe(s.rev, s.sessions);
+  const compTicket = safe(compTotals.revenue_brl, compTotals.orders);
+  const compConv   = safe(compTotals.orders, compTotals.sessions);
+  const compRps    = safe(compTotals.revenue_brl, compTotals.sessions);
 
   // Volumes: mock para WPP (Vekta ainda sem dados)
   let disparos=0, participantes=0;
@@ -1025,33 +1057,35 @@ async function renderChannel(key){
 
   // KPIs do canal — 6º card: CTOR real para e-mail, mock para WPP
   const kpis = [
-    {label:'Faturamento', val:fmtBRLfull(s.rev)},
-    {label:'Compras',     val:fmtInt(s.purchases)},
-    {label:'Ticket Médio',val:s.purchases>0?fmtBRLfull(ticket):'—'},
-    {label:'RPS',         val:s.sessions>0?fmtBRL2(rps):'—'},
-    {label:'Conversão',   val:s.sessions>0?fmtPct(conv):'—'},
+    {label:'Faturamento', val:fmtBRLfull(s.rev),                                delta:_deltaBadge(s.rev, compTotals.revenue_brl)},
+    {label:'Compras',     val:fmtInt(s.purchases),                               delta:_deltaBadge(s.purchases, compTotals.orders)},
+    {label:'Ticket Médio',val:s.purchases>0?fmtBRLfull(ticket):'—',              delta:s.purchases>0&&compTotals.orders>0?_deltaBadge(ticket,compTicket):''},
+    {label:'RPS',         val:s.sessions>0?fmtBRL2(rps):'—',                     delta:s.sessions>0&&compTotals.sessions>0?_deltaBadge(rps,compRps):''},
+    {label:'Conversão',   val:s.sessions>0?fmtPct(conv):'—',                     delta:s.sessions>0&&compTotals.sessions>0?_deltaBadge(conv,compConv):''},
   ];
   if(isEmail){
-    kpis.push({label:'CTOR', val:em.opens>0?fmtPct1(safe(em.clicks,em.opens)):'—', highlight:true});
+    kpis.push({label:'CTOR', val:em.opens>0?fmtPct1(safe(em.clicks,em.opens)):'—', highlight:true, delta:''});
   } else if(cfg.topPerDisparo){
-    kpis.push({label:'Receita / Disparo', val:disparos>0?fmtBRL2(safe(s.rev,disparos)):'—', highlight:true});
+    kpis.push({label:'Receita / Disparo', val:disparos>0?fmtBRL2(safe(s.rev,disparos)):'—', highlight:true, delta:''});
   }
   document.getElementById('kpi-'+key).innerHTML = kpis.map(k=>`
     <div class="card ${k.highlight?'kpi-card highlight':''}">
       <div class="card-title">${k.label}</div>
       <div class="kpi-value">${k.val}</div>
-      <div class="kpi-deltas"><span class="delta-label">${dlabel(start)} → ${dlabel(end)}</span></div>
+      <div class="kpi-deltas">${k.delta||''}<span class="delta-label">${dlabel(start)} → ${dlabel(end)}</span></div>
     </div>`).join('');
 
   renderFunnel('funnel-'+key, s);
 
   mkChart('chart-rev-'+key,{
     type:'line',
-    data:{labels:dlabels,datasets:[{
-      label:'Receita',data:dailyRevData,
-      borderColor:ch.color,backgroundColor:ch.color+'33',fill:true,tension:.35,pointRadius:0,borderWidth:2
-    }]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmtBRLfull(c.parsed.y)}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},maxRotation:0}},y:{ticks:{callback:v=>fmtBRL(v)},grid:{color:'#f1f4f8'}}}}
+    data:{labels:dlabels,datasets:[
+      {label:'Receita', data:dailyRevData, borderColor:ch.color, backgroundColor:ch.color+'33', fill:true, tension:.35, pointRadius:0, borderWidth:2},
+      {label:'Receita ◁', data:compRevData, borderColor:ch.color+'80', backgroundColor:'transparent', fill:false, tension:.35, pointRadius:0, borderWidth:1.2, borderDash:[5,4]},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmtBRLfull(c.parsed.y)}}},
+      scales:{x:{grid:{display:false},ticks:{font:{size:9},maxRotation:0}},y:{ticks:{callback:v=>fmtBRL(v)},grid:{color:'#f1f4f8'}}}}
   });
 
   // Gráfico de eficiência: disparos+aberturas reais (e-mail) ou mock (WPP)
@@ -1433,11 +1467,15 @@ document.getElementById('f-channel').addEventListener('change',e=>{
     else { document.querySelector(`.tab-btn[data-page="${v}"]`).click(); }
   }
 });
-document.getElementById('f-customer').addEventListener('change', () => {
-  if(document.querySelector('.tab-btn.active')?.dataset.page === 'resumo') _drawResumo();
+document.getElementById('f-customer').addEventListener('change', async () => {
+  const activePage = document.querySelector('.tab-btn.active')?.dataset.page;
+  if(activePage === 'resumo') { _drawResumo(); }
+  else if(activePage && CHANNELS[activePage]) { await renderChannel(activePage); renderedChannels.add(activePage); }
 });
-document.getElementById('f-compare').addEventListener('change', () => {
-  if(document.querySelector('.tab-btn.active')?.dataset.page === 'resumo') _drawResumo();
+document.getElementById('f-compare').addEventListener('change', async () => {
+  const activePage = document.querySelector('.tab-btn.active')?.dataset.page;
+  if(activePage === 'resumo') { _drawResumo(); }
+  else if(activePage && CHANNELS[activePage]) { await renderChannel(activePage); renderedChannels.add(activePage); }
 });
 
 renderResumo(); // async — carrega dados do Supabase

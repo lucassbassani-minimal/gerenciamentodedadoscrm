@@ -49,14 +49,20 @@ def make_client() -> httpx.Client:
     return httpx.Client(
         base_url=BASE_URL,
         headers={"Authorization": f"Klaviyo-API-Key {key}", "revision": REVISION},
-        timeout=30.0,
+        timeout=60.0,
     )
 
 
 def _get(client: httpx.Client, path: str, params: dict | None = None) -> dict:
     time.sleep(REQUEST_THROTTLE_SECS)
     for attempt in range(MAX_RETRIES):
-        resp = client.get(path, params=params)
+        try:
+            resp = client.get(path, params=params)
+        except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.TimeoutException) as exc:
+            wait = 2 ** (attempt + 1)
+            logger.warning({"event": "timeout_retry", "path": path, "attempt": attempt + 1, "wait_secs": wait})
+            time.sleep(wait)
+            continue
         if resp.status_code == 429:
             retry_after = int(resp.headers.get("Retry-After", 2 ** (attempt + 1)))
             logger.warning({"event": "rate_limit", "path": path, "wait_secs": retry_after})
@@ -71,7 +77,13 @@ def _get(client: httpx.Client, path: str, params: dict | None = None) -> dict:
 
 def _post(client: httpx.Client, path: str, body: dict) -> dict:
     for attempt in range(MAX_RETRIES):
-        resp = client.post(path, json=body)
+        try:
+            resp = client.post(path, json=body)
+        except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.TimeoutException) as exc:
+            wait = 2 ** (attempt + 1)
+            logger.warning({"event": "timeout_retry_post", "path": path, "attempt": attempt + 1, "wait_secs": wait})
+            time.sleep(wait)
+            continue
         if resp.status_code == 429:
             wait = 2 ** attempt
             logger.warning({"event": "rate_limit_post", "path": path, "wait_secs": wait})

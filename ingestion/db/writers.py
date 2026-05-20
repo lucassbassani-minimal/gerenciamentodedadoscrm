@@ -263,11 +263,11 @@ def upsert_email_health(
     record = {
         "date": today.isoformat(),
         "channel_id": channel_ids["email_flow"],
-        "active_base_count": active_base_count,
+        "active_subscribers": active_base_count,
         "ingested_at": now,
     }
     sb.table("fact_email_health").upsert([record], on_conflict="date,channel_id").execute()
-    logger.info({"event": "email_health_upserted", "active_base_count": active_base_count})
+    logger.info({"event": "email_health_upserted", "active_subscribers": active_base_count})
     return 1
 
 
