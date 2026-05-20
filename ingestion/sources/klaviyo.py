@@ -239,18 +239,17 @@ def fetch_forms(client: httpx.Client) -> list[KlaviyoForm]:
     logger.info("klaviyo: buscando formulários")
     result = []
     for item in _paginate(client, "/forms/", {
-        "fields[form]": "name,status,archived,form_type,created,updated",
+        "fields[form]": "name,status,created_at,updated_at",
     }):
         a = item["attributes"]
-        if a.get("archived"):
+        if a.get("status", "").lower() == "archived":
             continue
         result.append(KlaviyoForm.model_validate({
             "id": item["id"],
             "name": a["name"],
             "status": a.get("status", "active"),
-            "form_type": FORM_TYPE_MAP.get((a.get("form_type") or "POPUP").upper(), "form"),
-            "created": a["created"],
-            "updated": a["updated"],
+            "created_at": a["created_at"],
+            "updated_at": a["updated_at"],
         }))
     logger.info({"event": "forms_fetched", "count": len(result)})
     return result

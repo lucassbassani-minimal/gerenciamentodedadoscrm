@@ -1,3 +1,4 @@
+import argparse
 import logging
 import sys
 from datetime import date, timedelta
@@ -22,9 +23,9 @@ KLAVIYO_DAYS_LOOKBACK = 30
 SHOPIFY_DAYS_LOOKBACK = 60
 
 
-def run_klaviyo_ingestion() -> None:
+def run_klaviyo_ingestion(klaviyo_days: int = KLAVIYO_DAYS_LOOKBACK) -> None:
     logger.info("=== Klaviyo: início da ingestão ===")
-    since = date.today() - timedelta(days=KLAVIYO_DAYS_LOOKBACK)
+    since = date.today() - timedelta(days=klaviyo_days)
 
     sb = get_supabase_client()
     client = klaviyo_source.make_client()
@@ -90,8 +91,15 @@ def run_sheets_ingestion() -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Roda a ingestão de dados do CRM")
+    parser.add_argument(
+        "--klaviyo-days", type=int, default=KLAVIYO_DAYS_LOOKBACK,
+        help=f"Dias de lookback para ingestão Klaviyo (padrão: {KLAVIYO_DAYS_LOOKBACK})",
+    )
+    args = parser.parse_args()
+
     sources = [
-        ("klaviyo", run_klaviyo_ingestion),
+        ("klaviyo", lambda: run_klaviyo_ingestion(args.klaviyo_days)),
         ("shopify", run_shopify_ingestion),
         ("sheets", run_sheets_ingestion),
     ]

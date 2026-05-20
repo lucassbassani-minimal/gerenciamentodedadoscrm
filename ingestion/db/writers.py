@@ -226,7 +226,13 @@ def upsert_email_sends(
             "ingested_at": now,
         })
     if skipped:
-        logger.warning({"event": "email_sends_skipped", "skipped": skipped, "reason": "message_id not in dim_asset_items"})
+        skipped_ids = [r.message_id for r in rows if item_map.get(r.message_id) is None]
+        logger.warning({
+            "event": "email_sends_skipped",
+            "skipped": skipped,
+            "reason": "message_id not in dim_asset_items",
+            "sample_ids": skipped_ids[:5],
+        })
     if not records:
         return 0
     sb.table("fact_email_sends").upsert(records, on_conflict="date,asset_item_id").execute()

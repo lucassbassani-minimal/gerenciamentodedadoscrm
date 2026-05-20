@@ -449,6 +449,41 @@ async function fetchFirstRepeat(start, end) {
   if (error) { console.error('fetchFirstRepeat error:', error); return []; }
   return data || [];
 }
+async function fetchRevenueByType(start, end) {
+  const {data, error} = await _sb.from('vw_revenue_by_channel_type')
+    .select('date,channel_slug,tipo,revenue_brl,orders')
+    .gte('date',start).lte('date',end);
+  if (error) { console.error('fetchRevenueByType error:', error); return []; }
+  return data || [];
+}
+function getComparisonPeriod(start, end) {
+  const s = new Date(start + 'T00:00:00'), e = new Date(end + 'T00:00:00');
+  const days = Math.round((e - s) / 86400000);
+  const compEnd = new Date(s); compEnd.setDate(compEnd.getDate() - 1);
+  const compStart = new Date(compEnd); compStart.setDate(compStart.getDate() - days);
+  return {start: compStart.toISOString().slice(0,10), end: compEnd.toISOString().slice(0,10)};
+}
+function _applyCustomerFilter(rows, revByType, customerFilter) {
+  if (customerFilter === 'all') return rows;
+  const tipoKey = customerFilter === 'first' ? '1a_compra' : 'recompra';
+  const lookup = {};
+  for (const r of revByType.filter(r => r.tipo === tipoKey)) {
+    lookup[(r.date||'').slice(0,10) + '|' + r.channel_slug] = {
+      revenue_brl: parseFloat(r.revenue_brl||0), orders: r.orders || 0,
+    };
+  }
+  return rows.map(r => {
+    const ov = lookup[(r.date||'').slice(0,10) + '|' + r.channel_slug] || {revenue_brl:0, orders:0};
+    return {...r, revenue_brl: ov.revenue_brl, orders: ov.orders};
+  });
+}
+function _deltaBadge(curr, prev) {
+  if (!prev || prev === 0) return '';
+  const pct = (curr - prev) / Math.abs(prev);
+  const cls = pct >= 0 ? 'up' : 'down';
+  const sym = pct >= 0 ? '▲' : '▼';
+  return `<span class="delta ${cls}">${sym} ${Math.abs(pct*100).toFixed(1)}%</span>`;
+}
 async function fetchEmailChannelDaily(slug, start, end) {
   const {data,error} = await _sb.from('vw_email_channel_daily')
     .select('date,sends,opens,clicks,bounces,unsubscribes,open_rate_pct,ctor_pct')
@@ -526,47 +561,82 @@ const CONV   = 0.0244;
 // =========================================
 // RESUMO (dados reais do Supabase)
 // =========================================
+let _resumoRows = [], _resumoFrData = [], _resumoRevByType = [],
+    _resumoCompRows = [], _resumoCompRevByType = [],
+    _resumoStart = '', _resumoEnd = '', _resumoCompStart = '', _resumoCompEnd = '';
+
 async function renderResumo() {
   const period = document.getElementById('f-period').value;
   const {start, end} = getDateRange(period);
+  _resumoStart = start;
+  _resumoEnd   = end;
+  const comp = getComparisonPeriod(start, end);
+  _resumoCompStart = comp.start;
+  _resumoCompEnd   = comp.end;
 
   document.getElementById('kpi-topline').innerHTML =
     '<div style="grid-column:1/-1;color:var(--muted);padding:20px;text-align:center">Carregando dados...</div>';
 
-  let rows, frData;
   try {
-    [rows, frData] = await Promise.all([fetchChannelData(start,end), fetchFirstRepeat(start,end)]);
+    [_resumoRows, _resumoFrData, _resumoRevByType, _resumoCompRows, _resumoCompRevByType] = await Promise.all([
+      fetchChannelData(start, end),
+      fetchFirstRepeat(start, end),
+      fetchRevenueByType(start, end),
+      fetchChannelData(comp.start, comp.end),
+      fetchRevenueByType(comp.start, comp.end),
+    ]);
   } catch(err) {
     document.getElementById('kpi-topline').innerHTML =
       `<div style="grid-column:1/-1;color:var(--danger);padding:20px">Erro ao carregar: ${err.message}</div>`;
     return;
   }
 
-  const {byChannel, byDate, total} = aggregateTotals(rows);
+  _drawResumo();
+}
+
+function _drawResumo() {
+  const channelFilter  = document.getElementById('f-channel').value;
+  const customerFilter = document.getElementById('f-customer').value;
+  const channelSlug    = channelFilter !== 'all' ? CHANNELS[channelFilter]?.slug : null;
+  const rawRows        = channelSlug ? _resumoRows.filter(r => r.channel_slug === channelSlug) : _resumoRows;
+  const rawCompRows    = channelSlug ? _resumoCompRows.filter(r => r.channel_slug === channelSlug) : _resumoCompRows;
+  const rawRevByType     = channelSlug ? _resumoRevByType.filter(r => r.channel_slug === channelSlug) : _resumoRevByType;
+  const rawCompRevByType = channelSlug ? _resumoCompRevByType.filter(r => r.channel_slug === channelSlug) : _resumoCompRevByType;
+  const rows     = _applyCustomerFilter(rawRows, rawRevByType, customerFilter);
+  const compRows = _applyCustomerFilter(rawCompRows, rawCompRevByType, customerFilter);
+  const frSource = channelSlug ? rawRevByType : _resumoFrData;
+  const start    = _resumoStart;
+  const end      = _resumoEnd;
+
+  const {byChannel, byDate, total}    = aggregateTotals(rows);
+  const {byChannel: compByChannel, byDate: compByDate, total: compTotal} = aggregateTotals(compRows);
   const safe = (a,b) => b>0 ? a/b : 0;
-  const ticket = safe(total.revenue_brl, total.orders);
-  const conv   = safe(total.orders, total.sessions);
-  const rps    = safe(total.revenue_brl, total.sessions);
+  const ticket     = safe(total.revenue_brl, total.orders);
+  const conv       = safe(total.orders, total.sessions);
+  const rps        = safe(total.revenue_brl, total.sessions);
+  const compTicket = safe(compTotal.revenue_brl, compTotal.orders);
+  const compConv   = safe(compTotal.orders, compTotal.sessions);
+  const compRps    = safe(compTotal.revenue_brl, compTotal.sessions);
   const dlabel = d => d.slice(5).replace('-','/');
 
   // — KPIs topline —
   document.getElementById('kpi-topline').innerHTML = [
-    {label:'Faturamento CRM', val:fmtBRLfull(total.revenue_brl)},
-    {label:'Pedidos',         val:fmtInt(total.orders)},
-    {label:'Ticket Médio',    val:total.orders>0?fmtBRLfull(ticket):'—'},
-    {label:'RPS',             val:total.sessions>0?fmtBRL2(rps):'—'},
-    {label:'Conversão Geral', val:total.sessions>0?fmtPct(conv):'—'},
+    {label:'Faturamento CRM', val:fmtBRLfull(total.revenue_brl), delta:_deltaBadge(total.revenue_brl, compTotal.revenue_brl)},
+    {label:'Pedidos',         val:fmtInt(total.orders),           delta:_deltaBadge(total.orders, compTotal.orders)},
+    {label:'Ticket Médio',    val:total.orders>0?fmtBRLfull(ticket):'—',   delta:total.orders>0&&compTotal.orders>0?_deltaBadge(ticket,compTicket):''},
+    {label:'RPS',             val:total.sessions>0?fmtBRL2(rps):'—',       delta:total.sessions>0&&compTotal.sessions>0?_deltaBadge(rps,compRps):''},
+    {label:'Conversão Geral', val:total.sessions>0?fmtPct(conv):'—',       delta:total.sessions>0&&compTotal.sessions>0?_deltaBadge(conv,compConv):''},
   ].map(k=>`
     <div class="card">
       <div class="card-title">${k.label}</div>
       <div class="kpi-value">${k.val}</div>
-      <div class="kpi-deltas"><span class="delta-label">${dlabel(start)} → ${dlabel(end)}</span></div>
+      <div class="kpi-deltas">${k.delta}<span class="delta-label">${dlabel(start)} → ${dlabel(end)}</span></div>
     </div>`).join('');
 
-  // — Receita 1ª Compra vs Recompra (view pré-agregada vw_revenue_first_repeat — R11) —
-  const revFirst  = frData.filter(r=>r.tipo==='1a_compra').reduce((s,r)=>s+parseFloat(r.revenue_brl||0),0);
-  const revRepeat = frData.filter(r=>r.tipo==='recompra').reduce((s,r)=>s+parseFloat(r.revenue_brl||0),0);
-  const revAtrib  = revFirst + revRepeat; // sempre: first + repeat = total desta seção
+  // — Receita 1ª Compra vs Recompra (frSource: vw_revenue_first_repeat ou vw_revenue_by_channel_type filtrado por canal — R11) —
+  const revFirst  = frSource.filter(r=>r.tipo==='1a_compra').reduce((s,r)=>s+parseFloat(r.revenue_brl||0),0);
+  const revRepeat = frSource.filter(r=>r.tipo==='recompra').reduce((s,r)=>s+parseFloat(r.revenue_brl||0),0);
+  const revAtrib  = revFirst + revRepeat;
 
   document.getElementById('rev-first').textContent  = fmtBRLfull(revFirst);
   document.getElementById('meta-first').textContent = revAtrib>0 ? fmtPct1(safe(revFirst,revAtrib))+' das vendas atribuídas' : '—';
@@ -584,12 +654,13 @@ async function renderResumo() {
   document.getElementById('bar-total').style.width  = '0%';
 
   // — Gráfico diário 1ª vs Recompra (por dia, pedidos atribuídos) —
-  const dates   = makeDateRange(start, end);
-  const dlabels = dates.map(dlabel);
-  // frData vem da view pré-agregada por (date, tipo) — max 2 linhas/dia, sem limite de 1000
+  const dates     = makeDateRange(start, end);
+  const compDates = makeDateRange(_resumoCompStart, _resumoCompEnd);
+  const dlabels   = dates.map(dlabel);
+  // frSource: view pré-agregada por (date, tipo) — usa canal quando filtro ativo
   const dayRev = (d, tipo) => {
-    const row = frData.find(r=>(r.date||'').slice(0,10)===d && r.tipo===tipo);
-    return row ? parseFloat(row.revenue_brl||0) : 0;
+    const matching = frSource.filter(r=>(r.date||'').slice(0,10)===d && r.tipo===tipo);
+    return matching.reduce((s,r)=>s+parseFloat(r.revenue_brl||0),0);
   };
 
   document.getElementById('title-first-repeat').textContent =
@@ -649,19 +720,30 @@ async function renderResumo() {
   mkHBar('chart-tkm',      chArr.map(c=>safe(c.revenue_brl,c.orders)), fmtBRLfull);
   mkHBar('chart-rps',      chArr.map(c=>safe(c.revenue_brl,c.sessions)), fmtBRL2);
 
-  // — Time series 4 métricas —
-  const mkLineTS = (id,fn,fmt) => mkChart(id,{
-    type:'line',
-    data:{labels:dlabels,datasets:SLUG_ORDER.filter(s=>byChannel[s]).map(s=>({
-      label:byChannel[s].name,
-      data:dates.map(d=>{const dd=byDate[d]?.[s]; return dd?fn(dd):null;}),
-      borderColor:SLUG_COLOR[s]||'#94a3b8',backgroundColor:'transparent',
-      tension:.3,pointRadius:0,borderWidth:1.8,spanGaps:true,
-    }))},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.parsed.y)}}},
-      scales:{x:{grid:{display:false},ticks:{font:{size:9},maxRotation:0}},y:{ticks:{callback:v=>fmt(v),font:{size:10}},grid:{color:'#f1f4f8'}}}}
-  });
+  // — Time series 4 métricas (linhas cheias = período atual, tracejadas = período anterior) —
+  const mkLineTS = (id, fn, fmt) => {
+    const mainDs = SLUG_ORDER.filter(s=>byChannel[s]).map(s=>({
+      label: byChannel[s].name,
+      data: dates.map(d=>{const dd=byDate[d]?.[s]; return dd?fn(dd):null;}),
+      borderColor: SLUG_COLOR[s]||'#94a3b8', backgroundColor:'transparent',
+      tension:.3, pointRadius:0, borderWidth:1.8, spanGaps:true,
+    }));
+    const compDs = SLUG_ORDER.filter(s=>compByChannel[s]).map(s=>({
+      label: (byChannel[s]?.name||compByChannel[s].name)+' ◁',
+      data: compDates.map(d=>{const dd=compByDate[d]?.[s]; return dd?fn(dd):null;}),
+      borderColor: (SLUG_COLOR[s]||'#94a3b8')+'80', backgroundColor:'transparent',
+      tension:.3, pointRadius:0, borderWidth:1.2, spanGaps:true, borderDash:[5,4],
+    }));
+    mkChart(id,{
+      type:'line',
+      data:{labels:dlabels, datasets:[...mainDs,...compDs]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}},
+          tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.parsed.y)}}},
+        scales:{x:{grid:{display:false},ticks:{font:{size:9},maxRotation:0}},
+          y:{ticks:{callback:v=>fmt(v),font:{size:10}},grid:{color:'#f1f4f8'}}}}
+    });
+  };
   mkLineTS('chart-sessions-ts', d=>d.sessions,   fmtInt);
   mkLineTS('chart-conv-ts',     d=>safe(d.orders,d.sessions)*100, v=>v.toFixed(2).replace('.',',')+'%');
   mkLineTS('chart-tkm-ts',      d=>safe(d.revenue_brl,d.orders),  v=>fmtBRL(v));
@@ -1342,9 +1424,20 @@ function resetFilters(){
 }
 
 document.getElementById('f-channel').addEventListener('change',e=>{
-  const v = e.target.value;
-  if(v==='all'){ document.querySelector('.tab-btn[data-page="resumo"]').click(); }
-  else { document.querySelector(`.tab-btn[data-page="${v}"]`).click(); }
+  const activePage = document.querySelector('.tab-btn.active')?.dataset.page;
+  if(activePage === 'resumo'){
+    _drawResumo();
+  } else {
+    const v = e.target.value;
+    if(v==='all'){ document.querySelector('.tab-btn[data-page="resumo"]').click(); }
+    else { document.querySelector(`.tab-btn[data-page="${v}"]`).click(); }
+  }
+});
+document.getElementById('f-customer').addEventListener('change', () => {
+  if(document.querySelector('.tab-btn.active')?.dataset.page === 'resumo') _drawResumo();
+});
+document.getElementById('f-compare').addEventListener('change', () => {
+  if(document.querySelector('.tab-btn.active')?.dataset.page === 'resumo') _drawResumo();
 });
 
 renderResumo(); // async — carrega dados do Supabase

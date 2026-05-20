@@ -53,6 +53,6 @@ class KlaviyoForm(BaseModel):
     id: str
     name: str
     status: str
-    form_type: str
-    created: datetime
-    updated: datetime
+    form_type: str = "form"
+    created_at: datetime
+    updated_at: datetime
