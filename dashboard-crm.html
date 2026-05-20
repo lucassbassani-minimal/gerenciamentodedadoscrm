@@ -142,13 +142,6 @@ tr.nested td:first-child{padding-left:36px;color:var(--muted)}
     <input type="date" id="f-date-end" style="min-width:130px">
   </div>
   <div class="filter">
-    <label>Comparativo</label>
-    <select id="f-compare">
-      <option value="day">Dia vs Dia anterior</option>
-      <option value="month" selected>Mês vs Mês anterior</option>
-    </select>
-  </div>
-  <div class="filter">
     <label>Canal</label>
     <select id="f-channel">
       <option value="all" selected>Todos os canais</option>
@@ -561,7 +554,7 @@ const CONV   = 0.0244;
 // =========================================
 // RESUMO (dados reais do Supabase)
 // =========================================
-let _resumoRows = [], _resumoFrData = [], _resumoRevByType = [],
+let _resumoRows = [], _resumoRevByType = [],
     _resumoCompRows = [], _resumoCompRevByType = [],
     _resumoStart = '', _resumoEnd = '', _resumoCompStart = '', _resumoCompEnd = '';
 
@@ -578,9 +571,8 @@ async function renderResumo() {
     '<div style="grid-column:1/-1;color:var(--muted);padding:20px;text-align:center">Carregando dados...</div>';
 
   try {
-    [_resumoRows, _resumoFrData, _resumoRevByType, _resumoCompRows, _resumoCompRevByType] = await Promise.all([
+    [_resumoRows, _resumoRevByType, _resumoCompRows, _resumoCompRevByType] = await Promise.all([
       fetchChannelData(start, end),
-      fetchFirstRepeat(start, end),
       fetchRevenueByType(start, end),
       fetchChannelData(comp.start, comp.end),
       fetchRevenueByType(comp.start, comp.end),
@@ -604,7 +596,7 @@ function _drawResumo() {
   const rawCompRevByType = channelSlug ? _resumoCompRevByType.filter(r => r.channel_slug === channelSlug) : _resumoCompRevByType;
   const rows     = _applyCustomerFilter(rawRows, rawRevByType, customerFilter);
   const compRows = _applyCustomerFilter(rawCompRows, rawCompRevByType, customerFilter);
-  const frSource = channelSlug ? rawRevByType : _resumoFrData;
+  const frSource = rawRevByType; // filtra por canal e tipo automaticamente
   const start    = _resumoStart;
   const end      = _resumoEnd;
 
@@ -1448,7 +1440,6 @@ async function applyFilters(){
 }
 function resetFilters(){
   document.getElementById('f-period').value='7d';
-  document.getElementById('f-compare').value='month';
   document.getElementById('f-channel').value='all';
   document.getElementById('f-customer').value='all';
   document.getElementById('f-asset').value='all';
@@ -1472,12 +1463,6 @@ document.getElementById('f-customer').addEventListener('change', async () => {
   if(activePage === 'resumo') { _drawResumo(); }
   else if(activePage && CHANNELS[activePage]) { await renderChannel(activePage); renderedChannels.add(activePage); }
 });
-document.getElementById('f-compare').addEventListener('change', async () => {
-  const activePage = document.querySelector('.tab-btn.active')?.dataset.page;
-  if(activePage === 'resumo') { _drawResumo(); }
-  else if(activePage && CHANNELS[activePage]) { await renderChannel(activePage); renderedChannels.add(activePage); }
-});
-
 renderResumo(); // async — carrega dados do Supabase
 updateAssetFilter('resumo');
 </script>
