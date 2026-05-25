@@ -401,12 +401,8 @@ const _sb = supabase.createClient(
 );
 
 // =========================================
-// CONFIGURAÇÃO DE SYNC (preencher após deploy no Railway)
+// SINCRONIZAÇÃO — Supabase Edge Function (sem Railway)
 // =========================================
-// Cole aqui a URL pública do seu serviço no Railway (ex: https://xxx.up.railway.app)
-const RAILWAY_SYNC_URL = '';
-// Cole aqui o mesmo valor de SYNC_SECRET_TOKEN configurado no Railway
-const SYNC_SECRET_TOKEN = '';
 
 // =========================================
 // AUTENTICAÇÃO — Supabase Auth (magic link)
@@ -445,7 +441,7 @@ function _enterDashboard(email) {
   _dashboardReady = true;
   _stopAuthLoading();
   document.getElementById('login-overlay').style.display = 'none';
-  if (RAILWAY_SYNC_URL) document.getElementById('btn-sync').style.display = '';
+  document.getElementById('btn-sync').style.display = '';
   if (email) {
     const ud = document.getElementById('user-display');
     ud.textContent = email;
@@ -534,34 +530,26 @@ async function _refreshLastUpdate() {
 }
 
 async function triggerSync() {
-  if (!RAILWAY_SYNC_URL || !SYNC_SECRET_TOKEN) {
-    alert('Configure RAILWAY_SYNC_URL e SYNC_SECRET_TOKEN no topo do script.');
-    return;
-  }
   const btn = document.getElementById('btn-sync');
   const status = document.getElementById('sync-status');
   btn.disabled = true;
   btn.innerHTML = '<span class="spin">↻</span> Sincronizando...';
-  status.textContent = 'Conectando ao Railway...';
+  status.textContent = 'Buscando dados novos...';
   try {
-    const res = await fetch(`${RAILWAY_SYNC_URL}/sync?token=${SYNC_SECRET_TOKEN}`, { method: 'POST' });
-    const json = await res.json();
-    if (json.status === 'sync_started') {
-      status.textContent = 'Ingestão iniciada — aguarde ~2 min...';
-      // Depois de 2 min, atualiza os dados do Supabase automaticamente
-      setTimeout(async () => {
-        btn.disabled = false;
-        btn.innerHTML = '↻ Sincronizar';
-        await applyFilters();
-        _refreshLastUpdate();
-      }, 120000);
+    const { data, error } = await _sb.functions.invoke('sync-crm');
+    if (error) throw error;
+    if (data && data.status === 'ok') {
+      const k = data.klaviyo ?? {};
+      const s = data.shopify ?? {};
+      status.textContent = `Atualizado — ${s.count ?? 0} pedidos, ${k.metrics ?? 0} métricas`;
+      await applyFilters();
+      _refreshLastUpdate();
     } else {
-      status.textContent = json.message || json.status;
-      btn.disabled = false;
-      btn.innerHTML = '↻ Sincronizar';
+      status.textContent = (data && data.message) ? data.message : 'Erro desconhecido';
     }
   } catch (e) {
-    status.textContent = 'Erro ao conectar ao Railway.';
+    status.textContent = 'Erro: ' + (e.message || String(e));
+  } finally {
     btn.disabled = false;
     btn.innerHTML = '↻ Sincronizar';
   }
