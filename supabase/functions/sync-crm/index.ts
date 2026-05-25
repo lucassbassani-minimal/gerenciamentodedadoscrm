@@ -627,20 +627,20 @@ serve(async (req) => {
       shopifySince = addDays(today, -SHOPIFY_LOOKBACK_DAYS);
     }
 
-    // Klaviyo métricas: desde MAX(date) + 1 dia
+    // Klaviyo métricas: desde MAX(date) + 1 dia, máximo 7 dias atrás
     let metricsSince: Date;
     if (latestDates.emailSends) {
       metricsSince = addDays(latestDates.emailSends, 1);
     } else {
-      metricsSince = addDays(today, -30);
+      metricsSince = addDays(today, -7);
     }
+    const metricsFloor = addDays(today, -7);
+    if (metricsSince < metricsFloor) metricsSince = metricsFloor;
 
-    // Shopify e Sheets podem rodar em paralelo com Klaviyo
-    const [shopifyResult, sheetsResult, klaviyoResult] = await Promise.all([
-      syncShopify(sb, channelIds, shopifySince),
-      syncSheets(sb, channelIds),
-      syncKlaviyo(sb, channelIds, metricsSince),
-    ]);
+    // Rodar em sequência para não estourar memória
+    const shopifyResult = await syncShopify(sb, channelIds, shopifySince);
+    const sheetsResult = await syncSheets(sb, channelIds);
+    const klaviyoResult = await syncKlaviyo(sb, channelIds, metricsSince);
 
     return new Response(
       JSON.stringify({ status: "ok", shopify: shopifyResult, sheets: sheetsResult, klaviyo: klaviyoResult }),
