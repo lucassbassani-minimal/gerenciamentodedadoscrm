@@ -101,29 +101,47 @@ function parseBrDecimal(raw: string): number {
 // ── Klaviyo HTTP ───────────────────────────────────────────────────────────
 
 async function klaviyoGet(path: string, params: Record<string, string>, key: string): Promise<unknown> {
-  await new Promise((r) => setTimeout(r, 150));
+  await new Promise((r) => setTimeout(r, 300));
   const url = new URL(path.startsWith("http") ? path : `${KLAVIYO_BASE}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  const res = await fetch(url.toString(), {
-    headers: { Authorization: `Klaviyo-API-Key ${key}`, revision: KLAVIYO_REVISION },
-  });
-  if (!res.ok) throw new Error(`Klaviyo GET ${path} → ${res.status}: ${await res.text()}`);
-  return res.json();
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Klaviyo-API-Key ${key}`, revision: KLAVIYO_REVISION },
+    });
+    if (res.status === 429) {
+      const wait = (parseInt(res.headers.get("Retry-After") ?? "5") + 1) * 1000;
+      console.log(`Klaviyo 429 em ${path} — aguardando ${wait}ms`);
+      await new Promise((r) => setTimeout(r, wait));
+      continue;
+    }
+    if (!res.ok) throw new Error(`Klaviyo GET ${path} → ${res.status}: ${await res.text()}`);
+    return res.json();
+  }
+  throw new Error(`Klaviyo GET ${path} → 429 após 4 tentativas`);
 }
 
 async function klaviyoPost(path: string, body: unknown, key: string): Promise<unknown> {
-  await new Promise((r) => setTimeout(r, 150));
-  const res = await fetch(`${KLAVIYO_BASE}${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Klaviyo-API-Key ${key}`,
-      revision: KLAVIYO_REVISION,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`Klaviyo POST ${path} → ${res.status}: ${await res.text()}`);
-  return res.json();
+  await new Promise((r) => setTimeout(r, 300));
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const res = await fetch(`${KLAVIYO_BASE}${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Klaviyo-API-Key ${key}`,
+        revision: KLAVIYO_REVISION,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    if (res.status === 429) {
+      const wait = (parseInt(res.headers.get("Retry-After") ?? "5") + 1) * 1000;
+      console.log(`Klaviyo 429 em ${path} — aguardando ${wait}ms`);
+      await new Promise((r) => setTimeout(r, wait));
+      continue;
+    }
+    if (!res.ok) throw new Error(`Klaviyo POST ${path} → ${res.status}: ${await res.text()}`);
+    return res.json();
+  }
+  throw new Error(`Klaviyo POST ${path} → 429 após 4 tentativas`);
 }
 
 async function* klaviyoPaginate(path: string, params: Record<string, string>, key: string) {
