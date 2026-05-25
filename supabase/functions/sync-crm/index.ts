@@ -1,6 +1,8 @@
 /**
  * Edge Function: sync-crm
- * Ingestão incremental de Shopify, Klaviyo e Google Sheets → Supabase
+ * Sincroniza Shopify (CSV), Google Sheets (CSV) e métricas Klaviyo.
+ * O catálogo Klaviyo (fluxos/campanhas/mensagens) já está no banco
+ * e é mantido pelo Python — não é re-sincronizado aqui.
  *
  * Segredos necessários (Supabase Dashboard → Settings → Edge Functions):
  *   KLAVIYO_PRIVATE_API_KEY
@@ -10,8 +12,6 @@
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// ── Constantes ─────────────────────────────────────────────────────────────
-
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -19,7 +19,6 @@ const CORS = {
 
 const KLAVIYO_BASE = "https://a.klaviyo.com/api";
 const KLAVIYO_REVISION = "2024-10-15";
-const CAMPAIGNS_SINCE = "2026-02-01T00:00:00+00:00";
 const SHOPIFY_BUFFER_DAYS = 2;
 const SHOPIFY_LOOKBACK_DAYS = 60;
 
@@ -57,9 +56,6 @@ const METRIC_FIELDS: Record<string, string> = {
   unsubscribes: "Unsubscribed from Email Marketing",
 };
 
-const EMAIL_ACTION_TYPES = new Set(["SEND_EMAIL", "EMAIL"]);
-const ACTIVE_CAMPAIGN_STATUSES = new Set(["Sent", "Sending", "Scheduled"]);
-
 // ── Utilidades ─────────────────────────────────────────────────────────────
 
 const nowIso = () => new Date().toISOString();
@@ -81,14 +77,9 @@ function parseCSVLine(line: string): string[] {
   let inQuotes = false;
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
-    if (ch === '"') {
-      inQuotes = !inQuotes;
-    } else if (ch === "," && !inQuotes) {
-      result.push(current);
-      current = "";
-    } else {
-      current += ch;
-    }
+    if (ch === '"') { inQuotes = !inQuotes; }
+    else if (ch === "," && !inQuotes) { result.push(current); current = ""; }
+    else { current += ch; }
   }
   result.push(current);
   return result;
@@ -110,7 +101,7 @@ async function klaviyoGet(path: string, params: Record<string, string>, key: str
     });
     if (res.status === 429) {
       const wait = (parseInt(res.headers.get("Retry-After") ?? "5") + 1) * 1000;
-      console.log(`Klaviyo 429 em ${path} — aguardando ${wait}ms`);
+      console.log(`Klaviyo 429 — aguardando ${wait}ms`);
       await new Promise((r) => setTimeout(r, wait));
       continue;
     }
@@ -134,7 +125,7 @@ async function klaviyoPost(path: string, body: unknown, key: string): Promise<un
     });
     if (res.status === 429) {
       const wait = (parseInt(res.headers.get("Retry-After") ?? "5") + 1) * 1000;
-      console.log(`Klaviyo 429 em ${path} — aguardando ${wait}ms`);
+      console.log(`Klaviyo 429 — aguardando ${wait}ms`);
       await new Promise((r) => setTimeout(r, wait));
       continue;
     }
@@ -163,32 +154,9 @@ async function getChannelIds(sb: SupabaseClient): Promise<Record<string, string>
   return Object.fromEntries((data ?? []).map((r: { slug: string; id: string }) => [r.slug, r.id]));
 }
 
-async function getAssetMap(sb: SupabaseClient): Promise<Record<string, string>> {
-  const { data } = await sb.from("dim_assets").select("id,external_id").eq("source_tool", "klaviyo").limit(10000);
-  return Object.fromEntries((data ?? []).map((r: { external_id: string; id: string }) => [r.external_id, r.id]));
-}
-
 async function getAssetItemMap(sb: SupabaseClient): Promise<Record<string, string>> {
   const { data } = await sb.from("dim_asset_items").select("id,external_id").eq("type", "email").limit(10000);
   return Object.fromEntries((data ?? []).map((r: { external_id: string; id: string }) => [r.external_id, r.id]));
-}
-
-async function getSyncedCampaignIds(sb: SupabaseClient): Promise<Set<string>> {
-  const { data: items } = await sb.from("dim_asset_items").select("asset_id").eq("type", "email").limit(10000);
-  const assetIds = [...new Set((items ?? []).map((r: { asset_id: string }) => r.asset_id))];
-  if (!assetIds.length) return new Set();
-  const { data: assets } = await sb.from("dim_assets").select("external_id")
-    .eq("type", "campaign").eq("source_tool", "klaviyo").in("id", assetIds).limit(10000);
-  return new Set((assets ?? []).map((r: { external_id: string }) => r.external_id));
-}
-
-async function getSyncedFlowIds(sb: SupabaseClient): Promise<Set<string>> {
-  const { data: items } = await sb.from("dim_asset_items").select("asset_id").eq("type", "email").limit(10000);
-  const assetIds = [...new Set((items ?? []).map((r: { asset_id: string }) => r.asset_id))];
-  if (!assetIds.length) return new Set();
-  const { data: assets } = await sb.from("dim_assets").select("external_id")
-    .eq("type", "flow").eq("source_tool", "klaviyo").in("id", assetIds).limit(10000);
-  return new Set((assets ?? []).map((r: { external_id: string }) => r.external_id));
 }
 
 async function getLatestDates(sb: SupabaseClient) {
@@ -217,7 +185,6 @@ async function syncShopify(
 
   const lines = text.split("\n");
   const headers = parseCSVLine(lines[0]).map((h) => h.trim().replace(/^"|"$/g, ""));
-
   const records = [];
   const seenIds: Record<string, number> = {};
 
@@ -229,7 +196,6 @@ async function syncShopify(
     headers.forEach((h, idx) => (row[h] = (cols[idx] ?? "").trim().replace(/^"|"$/g, "")));
 
     if ((row.financial_status ?? "").toUpperCase() !== "PAID") continue;
-
     const parts = (row.processed_at_data ?? "").split("/");
     if (parts.length !== 3) continue;
     const orderDate = new Date(Date.UTC(+parts[2], +parts[1] - 1, +parts[0]));
@@ -265,226 +231,6 @@ async function syncShopify(
   return { count: records.length };
 }
 
-// ── Klaviyo ────────────────────────────────────────────────────────────────
-
-async function syncKlaviyo(
-  sb: SupabaseClient,
-  channelIds: Record<string, string>,
-  metricsSince: Date,
-): Promise<{ flows: number; campaigns: number; metrics: number }> {
-  const key = Deno.env.get("KLAVIYO_PRIVATE_API_KEY")!;
-  const now = nowIso();
-
-  // 1. Fluxos
-  const flows: { id: string; name: string; status: string }[] = [];
-  for await (const item of klaviyoPaginate("/flows/", {
-    "fields[flow]": "name,status",
-    "filter": "equals(archived,false)",
-    "page[size]": "50",
-  }, key)) {
-    // deno-lint-ignore no-explicit-any
-    const a = (item as any).attributes;
-    flows.push({ id: (item as any).id, name: a.name, status: a.status });
-  }
-  if (flows.length) {
-    await sb.from("dim_assets").upsert(
-      flows.map((f) => ({
-        external_id: f.id,
-        channel_id: channelIds["email_flow"],
-        name: f.name,
-        type: "flow",
-        is_active: f.status === "live",
-        source_tool: "klaviyo",
-        updated_at: now,
-        ingested_at: now,
-      })),
-      { onConflict: "external_id,source_tool" },
-    );
-  }
-
-  // 2. Campanhas
-  const campaigns: { id: string; name: string; status: string }[] = [];
-  for await (const item of klaviyoPaginate("/campaigns/", {
-    "fields[campaign]": "name,status,created_at,send_time",
-    "filter": `equals(messages.channel,'email'),greater-or-equal(created_at,${CAMPAIGNS_SINCE})`,
-  }, key)) {
-    // deno-lint-ignore no-explicit-any
-    const a = (item as any).attributes;
-    campaigns.push({ id: (item as any).id, name: a.name, status: a.status });
-  }
-  if (campaigns.length) {
-    await sb.from("dim_assets").upsert(
-      campaigns.map((c) => ({
-        external_id: c.id,
-        channel_id: channelIds["email_campaign"],
-        name: c.name,
-        type: "campaign",
-        is_active: ACTIVE_CAMPAIGN_STATUSES.has(c.status),
-        source_tool: "klaviyo",
-        updated_at: now,
-        ingested_at: now,
-      })),
-      { onConflict: "external_id,source_tool" },
-    );
-  }
-
-  const assetMap = await getAssetMap(sb);
-
-  // 3. Mensagens de fluxo (pula fluxos já sincronizados — mudam raramente)
-  const syncedFlowIds = await getSyncedFlowIds(sb);
-  for (const flow of flows) {
-    if (syncedFlowIds.has(flow.id)) continue;
-    const assetId = assetMap[flow.id];
-    if (!assetId) continue;
-    let emailPos = 0;
-    const msgRecords = [];
-    for await (const action of klaviyoPaginate(`/flows/${flow.id}/flow-actions/`, { "fields[flow-action]": "action_type" }, key)) {
-      // deno-lint-ignore no-explicit-any
-      if (!EMAIL_ACTION_TYPES.has((action as any).attributes?.action_type)) continue;
-      emailPos++;
-      for await (const msg of klaviyoPaginate(`/flow-actions/${(action as any).id}/flow-messages/`, { "fields[flow-message]": "name,created,updated" }, key)) {
-        // deno-lint-ignore no-explicit-any
-        const ma = (msg as any).attributes;
-        msgRecords.push({
-          external_id: (msg as any).id,
-          asset_id: assetId,
-          name: ma?.name || `Email ${emailPos}`,
-          type: "email",
-          position: emailPos,
-          updated_at: now,
-          ingested_at: now,
-        });
-      }
-    }
-    if (msgRecords.length) {
-      await sb.from("dim_asset_items").upsert(msgRecords, { onConflict: "external_id,type" });
-    }
-  }
-
-  // 4. Mensagens de campanha (pula campanhas já sincronizadas)
-  const syncedCampaignIds = await getSyncedCampaignIds(sb);
-  for (const campaign of campaigns) {
-    if (syncedCampaignIds.has(campaign.id)) continue;
-    const assetId = assetMap[campaign.id];
-    if (!assetId) continue;
-    const msgRecords = [];
-    for await (const msg of klaviyoPaginate(`/campaigns/${campaign.id}/campaign-messages/`, { "fields[campaign-message]": "label,created_at,updated_at" }, key)) {
-      // deno-lint-ignore no-explicit-any
-      const ma = (msg as any).attributes;
-      msgRecords.push({
-        external_id: (msg as any).id,
-        asset_id: assetId,
-        name: ma?.label || "Campaign Email",
-        type: "email",
-        position: null,
-        updated_at: now,
-        ingested_at: now,
-      });
-    }
-    if (msgRecords.length) {
-      await sb.from("dim_asset_items").upsert(msgRecords, { onConflict: "external_id,type" });
-    }
-  }
-
-  // 5. Métricas de e-mail (só desde a última data no banco)
-  let metricsCount = 0;
-  const today = todayDate();
-  if (metricsSince <= today) {
-    const metricIds: Record<string, string> = {};
-    const targetNames = new Set(Object.values(METRIC_FIELDS));
-    for await (const item of klaviyoPaginate("/metrics/", { "fields[metric]": "name" }, key)) {
-      // deno-lint-ignore no-explicit-any
-      const name = (item as any).attributes?.name;
-      // deno-lint-ignore no-explicit-any
-      if (targetNames.has(name)) metricIds[name] = (item as any).id;
-    }
-
-    const rows: Record<string, Record<string, number | string>> = {};
-    const sinceStr = metricsSince.toISOString().slice(0, 10);
-    const untilStr = today.toISOString().slice(0, 10);
-
-    for (const [field, metricName] of Object.entries(METRIC_FIELDS)) {
-      const metricId = metricIds[metricName];
-      if (!metricId) continue;
-      // deno-lint-ignore no-explicit-any
-      const result = (await klaviyoPost("/metric-aggregates/", {
-        data: {
-          type: "metric-aggregate",
-          attributes: {
-            metric_id: metricId,
-            measurements: ["count"],
-            interval: "day",
-            page_size: 500,
-            filter: [
-              `greater-or-equal(datetime,${sinceStr}T00:00:00+00:00)`,
-              `less-than(datetime,${untilStr}T23:59:59+00:00)`,
-            ],
-            by: ["$message"],
-          },
-        },
-      }, key)) as any;
-
-      const attrs = result.data?.attributes ?? {};
-      const dates: string[] = (attrs.dates ?? []).map((d: string) => d.slice(0, 10));
-      for (const row of attrs.data ?? []) {
-        const msgId = row.dimensions?.[0];
-        ((row.measurements?.count ?? []) as number[]).forEach((count, i) => {
-          if (!count || i >= dates.length) return;
-          const k = `${msgId}|${dates[i]}`;
-          if (!rows[k]) {
-            rows[k] = { message_id: msgId, date: dates[i], sends: 0, opens: 0, clicks: 0, bounces: 0, spam_complaints: 0, unsubscribes: 0 };
-          }
-          rows[k][field] = (rows[k][field] as number) + count;
-        });
-      }
-    }
-
-    const itemMap = await getAssetItemMap(sb);
-    const metricRecords = [];
-    for (const row of Object.values(rows)) {
-      const itemId = itemMap[row.message_id as string];
-      if (!itemId) continue;
-      metricRecords.push({
-        date: row.date,
-        asset_item_id: itemId,
-        sends: row.sends,
-        opens: row.opens,
-        clicks: row.clicks,
-        bounces: row.bounces,
-        spam_complaints: row.spam_complaints,
-        unsubscribes: row.unsubscribes,
-        ingested_at: now,
-      });
-    }
-
-    for (let i = 0; i < metricRecords.length; i += 500) {
-      await sb.from("fact_email_sends").upsert(metricRecords.slice(i, i + 500), { onConflict: "date,asset_item_id" });
-    }
-    metricsCount = metricRecords.length;
-  }
-
-  // 6. Formulários
-  const formRecords = [];
-  for await (const item of klaviyoPaginate("/forms/", { "fields[form]": "name,status,form_type,created_at,updated_at" }, key)) {
-    // deno-lint-ignore no-explicit-any
-    const a = (item as any).attributes;
-    if ((a?.status ?? "").toLowerCase() === "archived") continue;
-    formRecords.push({
-      external_id: (item as any).id,
-      name: a.name,
-      type: a.form_type?.toLowerCase() ?? "form",
-      is_active: !["draft", "archived"].includes((a.status ?? "").toLowerCase()),
-      ingested_at: now,
-    });
-  }
-  if (formRecords.length) {
-    await sb.from("dim_forms").upsert(formRecords, { onConflict: "external_id" });
-  }
-
-  console.log(`Klaviyo: ${flows.length} fluxos, ${campaigns.length} campanhas, ${metricsCount} linhas de métricas`);
-  return { flows: flows.length, campaigns: campaigns.length, metrics: metricsCount };
-}
-
 // ── Google Sheets ──────────────────────────────────────────────────────────
 
 async function syncSheets(
@@ -512,7 +258,6 @@ async function syncSheets(
 
     const slug = CHANNEL_SLUG_MAP[row.agrupamento_custom_Minimal ?? ""];
     if (!slug) continue;
-
     const parts = (row.event_date ?? "").split("/");
     if (parts.length !== 3) continue;
     const rowDate = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
@@ -591,6 +336,101 @@ async function syncSheets(
   return { sessions: sessionRecords.length, utm: utmRecords.length };
 }
 
+// ── Klaviyo — apenas métricas ──────────────────────────────────────────────
+// O catálogo (fluxos/campanhas/mensagens) já está no banco.
+// Aqui só sincroniza fact_email_sends para a janela dos últimos 7 dias.
+
+async function syncKlaviyoMetrics(
+  sb: SupabaseClient,
+  metricsSince: Date,
+): Promise<{ metrics: number }> {
+  const key = Deno.env.get("KLAVIYO_PRIVATE_API_KEY")!;
+  const now = nowIso();
+  const today = todayDate();
+
+  if (metricsSince > today) {
+    console.log("Klaviyo: métricas já atualizadas");
+    return { metrics: 0 };
+  }
+
+  // 1. Descobre IDs das 6 métricas de e-mail
+  const metricIds: Record<string, string> = {};
+  const targetNames = new Set(Object.values(METRIC_FIELDS));
+  for await (const item of klaviyoPaginate("/metrics/", { "fields[metric]": "name" }, key)) {
+    // deno-lint-ignore no-explicit-any
+    const name = (item as any).attributes?.name;
+    // deno-lint-ignore no-explicit-any
+    if (targetNames.has(name)) metricIds[name] = (item as any).id;
+  }
+
+  // 2. Busca agregados por dia × mensagem (6 POST requests)
+  const rows: Record<string, Record<string, number | string>> = {};
+  const sinceStr = metricsSince.toISOString().slice(0, 10);
+  const untilStr = today.toISOString().slice(0, 10);
+
+  for (const [field, metricName] of Object.entries(METRIC_FIELDS)) {
+    const metricId = metricIds[metricName];
+    if (!metricId) continue;
+    // deno-lint-ignore no-explicit-any
+    const result = (await klaviyoPost("/metric-aggregates/", {
+      data: {
+        type: "metric-aggregate",
+        attributes: {
+          metric_id: metricId,
+          measurements: ["count"],
+          interval: "day",
+          page_size: 500,
+          filter: [
+            `greater-or-equal(datetime,${sinceStr}T00:00:00+00:00)`,
+            `less-than(datetime,${untilStr}T23:59:59+00:00)`,
+          ],
+          by: ["$message"],
+        },
+      },
+    }, key)) as any;
+
+    const attrs = result.data?.attributes ?? {};
+    const dates: string[] = (attrs.dates ?? []).map((d: string) => d.slice(0, 10));
+    for (const row of attrs.data ?? []) {
+      const msgId = row.dimensions?.[0];
+      ((row.measurements?.count ?? []) as number[]).forEach((count: number, i: number) => {
+        if (!count || i >= dates.length) return;
+        const k = `${msgId}|${dates[i]}`;
+        if (!rows[k]) {
+          rows[k] = { message_id: msgId, date: dates[i], sends: 0, opens: 0, clicks: 0, bounces: 0, spam_complaints: 0, unsubscribes: 0 };
+        }
+        rows[k][field] = (rows[k][field] as number) + count;
+      });
+    }
+  }
+
+  // 3. Grava no banco
+  const itemMap = await getAssetItemMap(sb);
+  const metricRecords = [];
+  for (const row of Object.values(rows)) {
+    const itemId = itemMap[row.message_id as string];
+    if (!itemId) continue;
+    metricRecords.push({
+      date: row.date,
+      asset_item_id: itemId,
+      sends: row.sends,
+      opens: row.opens,
+      clicks: row.clicks,
+      bounces: row.bounces,
+      spam_complaints: row.spam_complaints,
+      unsubscribes: row.unsubscribes,
+      ingested_at: now,
+    });
+  }
+
+  for (let i = 0; i < metricRecords.length; i += 500) {
+    await sb.from("fact_email_sends").upsert(metricRecords.slice(i, i + 500), { onConflict: "date,asset_item_id" });
+  }
+
+  console.log(`Klaviyo: ${metricRecords.length} métricas gravadas`);
+  return { metrics: metricRecords.length };
+}
+
 // ── Handler principal ──────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -616,8 +456,9 @@ serve(async (req) => {
       getLatestDates(sb),
     ]);
 
-    // Shopify: desde MAX(order_date) - 2 dias, máximo 60 dias atrás
     const today = todayDate();
+
+    // Shopify: desde MAX(order_date) - 2 dias, máximo 60 dias atrás
     let shopifySince: Date;
     if (latestDates.orders) {
       shopifySince = addDays(latestDates.orders, -SHOPIFY_BUFFER_DAYS);
@@ -627,7 +468,7 @@ serve(async (req) => {
       shopifySince = addDays(today, -SHOPIFY_LOOKBACK_DAYS);
     }
 
-    // Klaviyo métricas: desde MAX(date) + 1 dia, máximo 7 dias atrás
+    // Klaviyo métricas: desde MAX(date)+1dia, máximo 7 dias atrás
     let metricsSince: Date;
     if (latestDates.emailSends) {
       metricsSince = addDays(latestDates.emailSends, 1);
@@ -640,7 +481,7 @@ serve(async (req) => {
     // Rodar em sequência para não estourar memória
     const shopifyResult = await syncShopify(sb, channelIds, shopifySince);
     const sheetsResult = await syncSheets(sb, channelIds);
-    const klaviyoResult = await syncKlaviyo(sb, channelIds, metricsSince);
+    const klaviyoResult = await syncKlaviyoMetrics(sb, metricsSince);
 
     return new Response(
       JSON.stringify({ status: "ok", shopify: shopifyResult, sheets: sheetsResult, klaviyo: klaviyoResult }),
