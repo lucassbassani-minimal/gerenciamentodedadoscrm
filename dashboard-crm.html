@@ -545,7 +545,8 @@ async function triggerSync() {
     if (data && data.status === 'ok') {
       const k = data.klaviyo ?? {};
       const s = data.shopify ?? {};
-      status.textContent = `Atualizado — ${s.count ?? 0} pedidos, ${k.metrics ?? 0} métricas`;
+      const sh = data.sheets ?? {};
+      status.textContent = `Atualizado — ${s.count ?? 0} pedidos · ${sh.sessions ?? 0} sessões · ${k.metrics ?? 0} métricas e-mail`;
       await applyFilters();
       _refreshLastUpdate();
     } else {
