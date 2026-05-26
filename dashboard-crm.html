@@ -956,18 +956,10 @@ function _drawResumo() {
 
   // — Captação de Leads (real — vw_leads_daily) —
   const leadsRows  = _resumoLeadsDaily;
-  const leadsTypes = [...new Set(leadsRows.map(r => r.form_type))].sort();
-  const typeColors = {popup:'#2563eb', form:'#10b981', embed:'#8b5cf6'};
   const typeLabel  = t => t==='popup'?'Popup':t==='form'?'Formulário':'Embed';
-  const leadsByTypeDay = {};
-  for (const t of leadsTypes) {
-    leadsByTypeDay[t] = dates.map(d =>
-      leadsRows.filter(r => (r.date||'').slice(0,10) === d && r.form_type === t)
-               .reduce((s,r) => s + (r.submissions||0), 0)
-    );
-  }
-  const leadsTotalDay = dates.map((_,i) =>
-    leadsTypes.reduce((s,t) => s + (leadsByTypeDay[t]?.[i]||0), 0)
+  const leadsTotalDay = dates.map(d =>
+    leadsRows.filter(r => (r.date||'').slice(0,10) === d)
+             .reduce((s,r) => s + (r.submissions||0), 0)
   );
   const leadsMTD     = leadsTotalDay.reduce((a,b) => a+b, 0);
   const periodViews  = leadsRows.reduce((s,r) => s + (r.impressions||0), 0);
@@ -976,19 +968,17 @@ function _drawResumo() {
   document.getElementById('leads-peak').textContent       = fmtInt(leadsTotalDay.length>0 ? Math.max(0,...leadsTotalDay) : 0)+' leads';
   document.getElementById('signup-rate-avg').textContent  = periodViews>0 ? fmtPct1(leadsMTD/periodViews) : '—';
   document.getElementById('form-views-total').textContent = fmtInt(periodViews);
-  if (leadsTypes.length > 0) {
-    mkChart('chart-leads-daily',{type:'bar',
-      data:{labels:dlabels,datasets:leadsTypes.map(t=>({
-        label:typeLabel(t),data:leadsByTypeDay[t],
-        backgroundColor:typeColors[t]||'#f59e0b',stack:'l',borderRadius:2,
-      }))},
-      options:{responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}},
-          tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmtInt(c.parsed.y)+' leads'}}},
-        scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:9},maxRotation:0}},
-          y:{stacked:true,ticks:{callback:v=>fmtInt(v),font:{size:10}},grid:{color:'#f1f4f8'}}}}
-    });
-  }
+  mkChart('chart-leads-daily',{type:'bar',
+    data:{labels:dlabels,datasets:[{
+      label:'Novos inscritos',data:leadsTotalDay,
+      backgroundColor:'#2563eb',borderRadius:3,
+    }]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:c=>fmtInt(c.parsed.y)+' inscritos'}}},
+      scales:{x:{grid:{display:false},ticks:{font:{size:9},maxRotation:0}},
+        y:{ticks:{callback:v=>fmtInt(v),font:{size:10}},grid:{color:'#f1f4f8'}}}}
+  });
 
   // — Formulários — agrega leadsRows por formulário (mesmo período do gráfico) —
   const formAgg = {};
