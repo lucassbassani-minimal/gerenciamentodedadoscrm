@@ -62,15 +62,27 @@ def get_asset_map(sb: Client) -> dict[str, str]:
 
 
 def get_asset_item_map(sb: Client) -> dict[str, str]:
-    """Retorna {external_id: uuid} de todos os itens de e-mail em dim_asset_items."""
-    resp = (
-        sb.table("dim_asset_items")
-        .select("id,external_id")
-        .eq("type", "email")
-        .limit(10000)
-        .execute()
-    )
-    return {row["external_id"]: row["id"] for row in resp.data}
+    """Retorna {external_id: uuid} de todos os itens de e-mail em dim_asset_items.
+
+    Pagina em blocos de 1000 para contornar o limite padrão da API do Supabase.
+    """
+    result: dict[str, str] = {}
+    page_size = 1000
+    offset = 0
+    while True:
+        resp = (
+            sb.table("dim_asset_items")
+            .select("id,external_id")
+            .eq("type", "email")
+            .range(offset, offset + page_size - 1)
+            .execute()
+        )
+        for row in resp.data:
+            result[row["external_id"]] = row["id"]
+        if len(resp.data) < page_size:
+            break
+        offset += page_size
+    return result
 
 
 def get_synced_campaign_ids(sb: Client) -> set[str]:
@@ -78,55 +90,47 @@ def get_synced_campaign_ids(sb: Client) -> set[str]:
 
     Campanhas enviadas são imutáveis — se já temos as mensagens no banco,
     não precisamos re-buscar na API do Klaviyo.
+
+    Usa paginação e chunks para evitar URLs longas demais no filtro .in_().
     """
-    items_resp = (
-        sb.table("dim_asset_items")
-        .select("asset_id")
-        .eq("type", "email")
-        .limit(10000)
-        .execute()
-    )
-    asset_ids_with_items = {row["asset_id"] for row in items_resp.data}
+    # Coleta todos os asset_ids que têm itens do tipo email (paginado)
+    asset_ids_with_items: set[str] = set()
+    page_size = 1000
+    offset = 0
+    while True:
+        resp = (
+            sb.table("dim_asset_items")
+            .select("asset_id")
+            .eq("type", "email")
+            .range(offset, offset + page_size - 1)
+            .execute()
+        )
+        for row in resp.data:
+            asset_ids_with_items.add(row["asset_id"])
+        if len(resp.data) < page_size:
+            break
+        offset += page_size
+
     if not asset_ids_with_items:
         return set()
-    assets_resp = (
-        sb.table("dim_assets")
-        .select("external_id")
-        .eq("type", "campaign")
-        .eq("source_tool", "klaviyo")
-        .in_("id", list(asset_ids_with_items))
-        .limit(10000)
-        .execute()
-    )
-    return {row["external_id"] for row in assets_resp.data}
 
-
-def get_synced_campaign_ids(sb: Client) -> set[str]:
-    """Retorna external_ids de campanhas que já têm mensagens em dim_asset_items.
-
-    Campanhas enviadas são imutáveis — se já temos as mensagens, não precisamos
-    buscar novamente na API do Klaviyo.
-    """
-    items_resp = (
-        sb.table("dim_asset_items")
-        .select("asset_id")
-        .eq("type", "email")
-        .limit(10000)
-        .execute()
-    )
-    asset_ids_with_items = {row["asset_id"] for row in items_resp.data}
-    if not asset_ids_with_items:
-        return set()
-    assets_resp = (
-        sb.table("dim_assets")
-        .select("external_id")
-        .eq("type", "campaign")
-        .eq("source_tool", "klaviyo")
-        .in_("id", list(asset_ids_with_items))
-        .limit(10000)
-        .execute()
-    )
-    return {row["external_id"] for row in assets_resp.data}
+    # Divide em lotes de 100 para evitar URL muito longa no filtro .in_()
+    synced: set[str] = set()
+    ids_list = list(asset_ids_with_items)
+    chunk_size = 100
+    for i in range(0, len(ids_list), chunk_size):
+        chunk = ids_list[i : i + chunk_size]
+        resp = (
+            sb.table("dim_assets")
+            .select("external_id")
+            .eq("type", "campaign")
+            .eq("source_tool", "klaviyo")
+            .in_("id", chunk)
+            .execute()
+        )
+        for row in resp.data:
+            synced.add(row["external_id"])
+    return synced
 
 
 def get_latest_dates(sb: Client) -> dict[str, date | None]:
@@ -276,15 +280,25 @@ def upsert_campaign_asset_items(
 
 
 def upsert_email_sends(
-    sb: Client, rows: list[KlaviyoEmailMetricRow], item_map: dict[str, str]
+    sb: Client,
+    rows: list[KlaviyoEmailMetricRow],
+    item_map: dict[str, str],
+    campaign_to_item_map: dict[str, str] | None = None,
 ) -> int:
+    """Grava métricas de e-mail em fact_email_sends.
+
+    item_map: {message_external_id → item_uuid} — mapa primário (fluxos + campanhas novas)
+    campaign_to_item_map: {campaign_external_id → item_uuid} — fallback para campanhas onde
+        o Klaviyo retorna o campaign ID em vez do campaign-message ID no campo $message.
+    """
     if not rows:
         return 0
     now = _now_iso()
+    fallback = campaign_to_item_map or {}
     records = []
     skipped = 0
     for r in rows:
-        item_id = item_map.get(r.message_id)
+        item_id = item_map.get(r.message_id) or fallback.get(r.message_id)
         if not item_id:
             skipped += 1
             continue
@@ -300,18 +314,64 @@ def upsert_email_sends(
             "ingested_at": now,
         })
     if skipped:
-        skipped_ids = [r.message_id for r in rows if item_map.get(r.message_id) is None]
+        skipped_ids = [r.message_id for r in rows if not (item_map.get(r.message_id) or fallback.get(r.message_id))]
         logger.warning({
             "event": "email_sends_skipped",
             "skipped": skipped,
-            "reason": "message_id not in dim_asset_items",
+            "reason": "message_id not in item_map nem em campaign_to_item_map",
             "sample_ids": skipped_ids[:5],
         })
     if not records:
         return 0
-    sb.table("fact_email_sends").upsert(records, on_conflict="date,asset_item_id").execute()
-    logger.info({"event": "email_sends_upserted", "count": len(records)})
-    return len(records)
+    # Desduplicar: quando dois message_ids mapeiam para o mesmo asset_item_id,
+    # soma as métricas para evitar conflito no upsert
+    merged: dict[tuple[str, str], dict] = {}
+    for rec in records:
+        key = (rec["date"], rec["asset_item_id"])
+        if key not in merged:
+            merged[key] = rec.copy()
+        else:
+            for field in ("sends", "opens", "clicks", "bounces", "spam_complaints", "unsubscribes"):
+                merged[key][field] = (merged[key].get(field) or 0) + (rec.get(field) or 0)
+    deduped = list(merged.values())
+    sb.table("fact_email_sends").upsert(deduped, on_conflict="date,asset_item_id").execute()
+    logger.info({"event": "email_sends_upserted", "count": len(deduped)})
+    return len(deduped)
+
+
+def get_campaign_to_item_map(sb: Client) -> dict[str, str]:
+    """Retorna {campaign_external_id: item_uuid} para campanhas com exatamente uma mensagem.
+
+    Usado como fallback quando o metric-aggregates retorna o campaign ID em vez do
+    campaign-message ID no campo $message (comportamento observado em campanhas de
+    fev-mar 2026).
+    """
+    # Pagina em blocos para contornar o limite de 1000 linhas da API Supabase
+    asset_to_item: dict[str, str] = {}
+    page_size = 1000
+    offset = 0
+    while True:
+        resp = (
+            sb.table("dim_asset_items")
+            .select("id,asset_id")
+            .eq("type", "email")
+            .range(offset, offset + page_size - 1)
+            .execute()
+        )
+        for row in resp.data:
+            if row["asset_id"] not in asset_to_item:
+                asset_to_item[row["asset_id"]] = row["id"]
+        if len(resp.data) < page_size:
+            break
+        offset += page_size
+
+    # converte para {campaign_external_id: item_uuid}
+    asset_map = get_asset_map(sb)  # {external_id: uuid}
+    result: dict[str, str] = {}
+    for ext_id, asset_uuid in asset_map.items():
+        if asset_uuid in asset_to_item:
+            result[ext_id] = asset_to_item[asset_uuid]
+    return result
 
 
 def get_form_id_map(sb: Client) -> dict[str, str]:

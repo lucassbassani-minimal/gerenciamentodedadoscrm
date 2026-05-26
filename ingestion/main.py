@@ -83,8 +83,9 @@ def run_klaviyo_ingestion(klaviyo_days: int | None = None) -> None:
         logger.info({"event": "metrics_since_auto", "since": metrics_since.isoformat(), "active_campaigns": len(active_campaigns)})
 
     item_map = writers.get_asset_item_map(sb)
+    campaign_to_item_map = writers.get_campaign_to_item_map(sb)
     metric_rows = klaviyo_source.fetch_email_metrics_since(client, metrics_since)
-    writers.upsert_email_sends(sb, metric_rows, item_map)
+    writers.upsert_email_sends(sb, metric_rows, item_map, campaign_to_item_map)
 
     # 7. Sincroniza formulários → dim_forms
     forms = klaviyo_source.fetch_forms(client)
@@ -183,15 +184,17 @@ def run_smart_ingestion() -> None:
         else:
             logger.info({"event": "smart_klaviyo_since", "since": metrics_since.isoformat()})
             item_map = writers.get_asset_item_map(sb)
+            campaign_to_item_map = writers.get_campaign_to_item_map(sb)
             metric_rows = klaviyo_source.fetch_email_metrics_since(client, metrics_since)
-            writers.upsert_email_sends(sb, metric_rows, item_map)
+            writers.upsert_email_sends(sb, metric_rows, item_map, campaign_to_item_map)
     else:
         # primeira carga: busca 30 dias
         metrics_since = today - timedelta(days=30)
         logger.info({"event": "smart_klaviyo_first_run", "since": metrics_since.isoformat()})
         item_map = writers.get_asset_item_map(sb)
+        campaign_to_item_map = writers.get_campaign_to_item_map(sb)
         metric_rows = klaviyo_source.fetch_email_metrics_since(client, metrics_since)
-        writers.upsert_email_sends(sb, metric_rows, item_map)
+        writers.upsert_email_sends(sb, metric_rows, item_map, campaign_to_item_map)
 
     forms = klaviyo_source.fetch_forms(client)
     writers.upsert_forms(sb, forms)
