@@ -161,6 +161,7 @@ tr.nested td:first-child{padding-left:36px;color:var(--muted)}
   <div class="filter">
     <label>Período</label>
     <select id="f-period" onchange="onPeriodChange()">
+      <option value="d0">Hoje</option>
       <option value="d1">D-1 (Ontem)</option>
       <option value="7d" selected>Últimos 7 dias</option>
       <option value="mtd">MTD (Mês até hoje)</option>
@@ -597,6 +598,7 @@ function getDateRange(period) {
     if (!s || !e) return {start:isoDate(t),end:isoDate(t)};
     return {start: s <= e ? s : e, end: s <= e ? e : s};
   }
+  if (period === 'd0') { return {start:isoDate(t),end:isoDate(t)}; }
   if (period === 'd1') { const y=new Date(t); y.setDate(y.getDate()-1); return {start:isoDate(y),end:isoDate(y)}; }
   if (period === '7d') { const s=new Date(t); s.setDate(s.getDate()-6); return {start:isoDate(s),end:isoDate(t)}; }
   if (period === 'mtd') { return {start:`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-01`,end:isoDate(t)}; }
