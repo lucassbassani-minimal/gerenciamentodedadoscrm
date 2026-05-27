@@ -1309,20 +1309,28 @@ async function renderChannel(key){
 
   // Gráfico de eficiência: Receita/Disparo (ec) ou Disparos+Aberturas (ef)
   if(isEmail && !cfg.topPerInscrito){
-    // E-mail Campanha: Receita por Disparo diário
+    // E-mail Campanha: Receita por Disparo — agrupa por send_date dos assets
+    const effByDate = {};
+    for (const r of emailAssetRows) {
+      const d = (r.send_date||'').slice(0,10);
+      if (!d) continue;
+      if (!effByDate[d]) effByDate[d] = {sends:0, rev:0};
+      effByDate[d].sends += (+r.sends||0);
+      effByDate[d].rev   += (+r.revenue_brl||0);
+    }
     const revPerDisp = dates.map(d => {
-      const sends = +emByDay[d]?.sends || 0;
-      const rev   = byDay[d]?.revenue_brl || 0;
-      return sends > 0 ? rev / sends : null;
+      const entry = effByDate[d];
+      return (entry && entry.sends > 0) ? entry.rev / entry.sends : null;
     });
     mkChart('chart-eff-'+key,{
-      type:'line',
+      type:'bar',
       data:{labels:dlabels,datasets:[{
         label:'Receita / Disparo',
         data:revPerDisp,
-        borderColor:ch.color, backgroundColor:ch.color+'22',
-        fill:true, tension:.35, pointRadius:2, pointBackgroundColor:ch.color, borderWidth:2,
-        spanGaps:false,
+        backgroundColor:ch.color+'cc',
+        borderColor:ch.color,
+        borderRadius:4,
+        borderWidth:1,
       }]},
       options:{responsive:true,maintainAspectRatio:false,
         plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'R$/disparo: '+fmtBRL2(c.parsed.y)}}},
