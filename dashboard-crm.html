@@ -696,10 +696,13 @@ async function fetchEmailChannelDaily(slug, start, end) {
   return data || [];
 }
 async function fetchEmailAssets(slug, start, end) {
+  const isCampaign = slug === 'email_campaign';
   let q = _sb.from('vw_email_asset_metrics')
-    .select('asset_name,asset_type,is_active,first_date,last_date,sends,opens,clicks,bounces,unsubscribes,open_rate_pct,ctor_pct,sends_per_day')
-    .eq('channel_slug', slug).order('sends', {ascending:false}).limit(2000);
-  if (slug === 'email_campaign' && start && end) {
+    .select('asset_name,asset_type,is_active,first_date,last_date,sends,opens,clicks,bounces,unsubscribes,open_rate_pct,ctor_pct,sends_per_day,revenue_brl,revenue_per_send')
+    .eq('channel_slug', slug)
+    .order(isCampaign ? 'last_date' : 'sends', {ascending: false})
+    .limit(2000);
+  if (isCampaign && start && end) {
     q = q.gte('last_date', start).lte('last_date', end);
   }
   const {data, error} = await q;
@@ -1492,29 +1495,62 @@ function renderEmailAssetTable(key, rows, color){
   const maxSends = Math.max(...rows.map(r=>+r.sends||0), 1);
   const isFlow = key === 'ef';
   const typeLabel = isFlow ? 'Fluxo' : 'Campanha';
-  const thead = `<thead><tr>
-    <th>${typeLabel}</th><th class="num">Disparos</th><th class="num">Aberturas</th>
-    <th class="num">T. Abertura</th><th class="num">Cliques</th><th class="num">CTOR</th>
-    <th class="num">Desc.</th><th class="num">Disparos/dia</th>
-  </tr></thead>`;
-  const tbody = rows.map(r=>{
-    const sends=+r.sends||0, opens=+r.opens||0, clicks=+r.clicks||0, unsubs=+r.unsubscribes||0;
-    const openRate = sends>0 ? (opens/sends*100).toFixed(1)+'%' : '—';
-    const ctor     = opens>0 ? (clicks/opens*100).toFixed(1)+'%' : '—';
-    const statusDot = r.is_active
-      ? '<span class="tag green">Ativo</span>'
-      : '<span class="tag" style="background:#f1f4f8;color:var(--muted)">Pausado</span>';
-    return `<tr>
-      <td><strong>${r.asset_name||'—'}</strong> ${statusDot}</td>
-      <td class="num"><span class="heat" style="background:${heatColor(sends,0,maxSends)}">${fmtInt(sends)}</span></td>
-      <td class="num">${fmtInt(opens)}</td>
-      <td class="num">${openRate}</td>
-      <td class="num">${fmtInt(clicks)}</td>
-      <td class="num">${ctor}</td>
-      <td class="num">${fmtInt(unsubs)}</td>
-      <td class="num">${(+r.sends_per_day||0).toFixed(0)}</td>
-    </tr>`;
-  }).join('');
+
+  let thead, tbody;
+  if (isFlow) {
+    thead = `<thead><tr>
+      <th>${typeLabel}</th><th class="num">Disparos</th><th class="num">Aberturas</th>
+      <th class="num">T. Abertura</th><th class="num">Cliques</th><th class="num">CTOR</th>
+      <th class="num">Desc.</th><th class="num">Disparos/dia</th>
+    </tr></thead>`;
+    tbody = rows.map(r=>{
+      const sends=+r.sends||0, opens=+r.opens||0, clicks=+r.clicks||0, unsubs=+r.unsubscribes||0;
+      const openRate = sends>0 ? (opens/sends*100).toFixed(1)+'%' : '—';
+      const ctor     = opens>0 ? (clicks/opens*100).toFixed(1)+'%' : '—';
+      const statusDot = r.is_active
+        ? '<span class="tag green">Ativo</span>'
+        : '<span class="tag" style="background:#f1f4f8;color:var(--muted)">Pausado</span>';
+      return `<tr>
+        <td><strong>${r.asset_name||'—'}</strong> ${statusDot}</td>
+        <td class="num"><span class="heat" style="background:${heatColor(sends,0,maxSends)}">${fmtInt(sends)}</span></td>
+        <td class="num">${fmtInt(opens)}</td>
+        <td class="num">${openRate}</td>
+        <td class="num">${fmtInt(clicks)}</td>
+        <td class="num">${ctor}</td>
+        <td class="num">${fmtInt(unsubs)}</td>
+        <td class="num">${(+r.sends_per_day||0).toFixed(0)}</td>
+      </tr>`;
+    }).join('');
+  } else {
+    const maxRev = Math.max(...rows.map(r=>+r.revenue_brl||0), 1);
+    thead = `<thead><tr>
+      <th>Data de Envio</th><th>${typeLabel}</th><th class="num">Disparos</th>
+      <th class="num">Aberturas</th><th class="num">T. Abertura</th>
+      <th class="num">Cliques</th><th class="num">CTOR</th>
+      <th class="num">Faturamento</th><th class="num">Receita/Disparo</th>
+    </tr></thead>`;
+    tbody = rows.map(r=>{
+      const sends=+r.sends||0, opens=+r.opens||0, clicks=+r.clicks||0;
+      const rev=+r.revenue_brl||0, rps=+r.revenue_per_send||0;
+      const openRate = sends>0 ? (opens/sends*100).toFixed(1)+'%' : '—';
+      const ctor     = opens>0 ? (clicks/opens*100).toFixed(1)+'%' : '—';
+      const sendDate = r.last_date ? r.last_date.substring(0,10) : '—';
+      const statusDot = r.is_active
+        ? '<span class="tag green">Ativo</span>'
+        : '<span class="tag" style="background:#f1f4f8;color:var(--muted)">Pausado</span>';
+      return `<tr>
+        <td>${sendDate}</td>
+        <td><strong>${r.asset_name||'—'}</strong> ${statusDot}</td>
+        <td class="num"><span class="heat" style="background:${heatColor(sends,0,maxSends)}">${fmtInt(sends)}</span></td>
+        <td class="num">${fmtInt(opens)}</td>
+        <td class="num">${openRate}</td>
+        <td class="num">${fmtInt(clicks)}</td>
+        <td class="num">${ctor}</td>
+        <td class="num"><span class="heat" style="background:${heatColor(rev,0,maxRev)}">${fmtBRLfull(rev)}</span></td>
+        <td class="num">${rps > 0 ? fmtBRL2(rps) : '—'}</td>
+      </tr>`;
+    }).join('');
+  }
   document.getElementById('table-asset-'+key).innerHTML = thead+'<tbody>'+tbody+'</tbody>';
 
   // Rankings reais por disparos e CTOR

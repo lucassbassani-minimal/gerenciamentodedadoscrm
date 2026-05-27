@@ -66,6 +66,7 @@ def fetch_paid_orders_since(since: date) -> list[ShopifyOrder]:
             utm_source=row.get("utm_source", "").strip() or None,
             utm_medium=row.get("utm_medium", "").strip() or None,
             utm_campaign=row.get("utm_campaign", "").strip() or None,
+            utm_content=row.get("utm_content", "").strip() or None,
         ))
 
     logger.info({
