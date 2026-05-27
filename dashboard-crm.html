@@ -1144,21 +1144,21 @@ function channelHTML(key){
     <div class="section-title">Ranking de Ativos · ${ch.name}</div>
     <div class="grid grid-2">
       <div class="card">
-        <div class="card-title">Top 5 Melhores · por ${ch.type==='email'?'Disparos':'Receita'}</div>
+        <div class="card-title">Top 5 · por ${key==='ec'?'Receita / Disparo':ch.type==='email'?'Disparos':'Receita'}</div>
         <div id="rank-best-${key}"></div>
       </div>
       <div class="card">
-        <div class="card-title">Top 5 Piores · por ${ch.type==='email'?'Disparos':'Receita'}</div>
+        <div class="card-title">Top 5 · por ${key==='ec'?'Receita':ch.type==='email'?'Disparos':'Receita'} ${key!=='ec'?'(piores)':''}</div>
         <div id="rank-worst-${key}"></div>
       </div>
     </div>
     <div class="grid grid-2" style="margin-top:14px">
       <div class="card">
-        <div class="card-title">Top 5 Melhores · por ${ch.type==='email'?'CTOR':cfg.rankingLabel}</div>
+        <div class="card-title">Top 5 · por ${key==='ec'?'Taxa de Abertura':ch.type==='email'?'CTOR':cfg.rankingLabel}</div>
         <div id="rank-best-eff-${key}"></div>
       </div>
       <div class="card">
-        <div class="card-title">Top 5 Piores · por ${ch.type==='email'?'CTOR':cfg.rankingLabel}</div>
+        <div class="card-title">Top 5 · por ${key==='ec'?'CTOR':ch.type==='email'?'CTOR':cfg.rankingLabel} ${key!=='ec'&&ch.type==='email'?'(piores)':''}</div>
         <div id="rank-worst-eff-${key}"></div>
       </div>
     </div>
@@ -1561,15 +1561,31 @@ function renderEmailAssetTable(key, rows, color){
   }
   document.getElementById('table-asset-'+key).innerHTML = thead+'<tbody>'+tbody+'</tbody>';
 
-  // Rankings reais por disparos e CTOR
-  const byDisparos = [...rows].sort((a,b)=>(+b.sends||0)-(+a.sends||0));
-  const byCtor = [...rows].filter(r=>(+r.opens||0)>0).sort((a,b)=>((+b.clicks||0)/(+b.opens||1))-((+a.clicks||0)/(+a.opens||1)));
-  const maxD = +byDisparos[0]?.sends || 1;
-  const maxC = byCtor[0] ? (+byCtor[0].clicks||0)/(+byCtor[0].opens||1) : 1;
-  document.getElementById('rank-best-'+key).innerHTML = byDisparos.slice(0,5).map((r,i)=>rankRow(i+1,r.asset_name,fmtInt(+r.sends||0),(+r.sends||0)/maxD,color)).join('');
-  document.getElementById('rank-worst-'+key).innerHTML = byDisparos.slice(-5).reverse().map((r,i)=>rankRow(i+1,r.asset_name,fmtInt(+r.sends||0),(+r.sends||0)/maxD,'#94a3b8')).join('');
-  document.getElementById('rank-best-eff-'+key).innerHTML = byCtor.slice(0,5).map((r,i)=>{const v=(+r.clicks||0)/(+r.opens||1);return rankRow(i+1,r.asset_name,fmtPct1(v),v/maxC,color);}).join('');
-  document.getElementById('rank-worst-eff-'+key).innerHTML = byCtor.slice(-5).reverse().map((r,i)=>{const v=(+r.clicks||0)/(+r.opens||1);return rankRow(i+1,r.asset_name,fmtPct1(v),v/maxC,'#94a3b8');}).join('');
+  if(key === 'ec'){
+    // E-mail Campanha: 4 rankings por métricas de performance
+    const byRps  = [...rows].filter(r=>(+r.revenue_per_send||0)>0).sort((a,b)=>(+b.revenue_per_send||0)-(+a.revenue_per_send||0));
+    const byRev  = [...rows].filter(r=>(+r.revenue_brl||0)>0).sort((a,b)=>(+b.revenue_brl||0)-(+a.revenue_brl||0));
+    const byOr   = [...rows].filter(r=>(+r.open_rate_pct||0)>0).sort((a,b)=>(+b.open_rate_pct||0)-(+a.open_rate_pct||0));
+    const byCtor2= [...rows].filter(r=>(+r.ctor_pct||0)>0).sort((a,b)=>(+b.ctor_pct||0)-(+a.ctor_pct||0));
+    const maxRps = +byRps[0]?.revenue_per_send || 1;
+    const maxRev = +byRev[0]?.revenue_brl || 1;
+    const maxOr  = +byOr[0]?.open_rate_pct || 1;
+    const maxCt  = +byCtor2[0]?.ctor_pct || 1;
+    document.getElementById('rank-best-'+key).innerHTML    = byRps.slice(0,5).map((r,i)=>rankRow(i+1,r.asset_name,fmtBRL2(+r.revenue_per_send||0),(+r.revenue_per_send||0)/maxRps,color)).join('');
+    document.getElementById('rank-worst-'+key).innerHTML   = byRev.slice(0,5).map((r,i)=>rankRow(i+1,r.asset_name,fmtBRLfull(+r.revenue_brl||0),(+r.revenue_brl||0)/maxRev,color)).join('');
+    document.getElementById('rank-best-eff-'+key).innerHTML= byOr.slice(0,5).map((r,i)=>rankRow(i+1,r.asset_name,fmtPct1((+r.open_rate_pct||0)/100),(+r.open_rate_pct||0)/maxOr,color)).join('');
+    document.getElementById('rank-worst-eff-'+key).innerHTML=byCtor2.slice(0,5).map((r,i)=>rankRow(i+1,r.asset_name,fmtPct1((+r.ctor_pct||0)/100),(+r.ctor_pct||0)/maxCt,color)).join('');
+  } else {
+    // Outros canais: rankings por disparos e CTOR
+    const byDisparos = [...rows].sort((a,b)=>(+b.sends||0)-(+a.sends||0));
+    const byCtor = [...rows].filter(r=>(+r.opens||0)>0).sort((a,b)=>((+b.clicks||0)/(+b.opens||1))-((+a.clicks||0)/(+a.opens||1)));
+    const maxD = +byDisparos[0]?.sends || 1;
+    const maxC = byCtor[0] ? (+byCtor[0].clicks||0)/(+byCtor[0].opens||1) : 1;
+    document.getElementById('rank-best-'+key).innerHTML = byDisparos.slice(0,5).map((r,i)=>rankRow(i+1,r.asset_name,fmtInt(+r.sends||0),(+r.sends||0)/maxD,color)).join('');
+    document.getElementById('rank-worst-'+key).innerHTML = byDisparos.slice(-5).reverse().map((r,i)=>rankRow(i+1,r.asset_name,fmtInt(+r.sends||0),(+r.sends||0)/maxD,'#94a3b8')).join('');
+    document.getElementById('rank-best-eff-'+key).innerHTML = byCtor.slice(0,5).map((r,i)=>{const v=(+r.clicks||0)/(+r.opens||1);return rankRow(i+1,r.asset_name,fmtPct1(v),v/maxC,color);}).join('');
+    document.getElementById('rank-worst-eff-'+key).innerHTML = byCtor.slice(-5).reverse().map((r,i)=>{const v=(+r.clicks||0)/(+r.opens||1);return rankRow(i+1,r.asset_name,fmtPct1(v),v/maxC,'#94a3b8');}).join('');
+  }
 }
 
 function renderAssetTable(key, data, cfg, isEmail, isWpp, isCommunity){
