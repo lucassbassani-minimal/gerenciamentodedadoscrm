@@ -474,7 +474,7 @@ async function syncKlaviyoMetrics(
         type: "metric-aggregate",
         attributes: {
           metric_id: metricId,
-          measurements: ["count"],
+          measurements: ["unique"],
           interval: "day",
           page_size: 500,
           filter: [
@@ -490,7 +490,7 @@ async function syncKlaviyoMetrics(
     const dates: string[] = (attrs.dates ?? []).map((d: string) => d.slice(0, 10));
     for (const row of attrs.data ?? []) {
       const msgId = row.dimensions?.[0];
-      ((row.measurements?.count ?? []) as number[]).forEach((count: number, i: number) => {
+      ((row.measurements?.unique ?? []) as number[]).forEach((count: number, i: number) => {
         if (!count || i >= dates.length) return;
         const k = `${msgId}|${dates[i]}`;
         if (!rows[k]) {
