@@ -570,15 +570,13 @@ serve(async (req) => {
       shopifySince = addDays(today, -SHOPIFY_LOOKBACK_DAYS);
     }
 
-    // Klaviyo métricas: desde MAX(date)+1dia, máximo 7 dias atrás
-    let metricsSince: Date;
-    if (latestDates.emailSends) {
-      metricsSince = addDays(latestDates.emailSends, 1);
-    } else {
-      metricsSince = addDays(today, -7);
-    }
-    const metricsFloor = addDays(today, -7);
-    if (metricsSince < metricsFloor) metricsSince = metricsFloor;
+    // Klaviyo métricas: desde MAX(date)+1dia, ou desde fev/2026 se banco vazio.
+    // Sem teto: o sync incremental retoma exatamente de onde parou.
+    // Na primeira execução (banco vazio) busca o histórico completo desde o início.
+    const KLAVIYO_METRICS_ORIGIN = new Date("2026-02-01T00:00:00Z");
+    const metricsSince: Date = latestDates.emailSends
+      ? addDays(latestDates.emailSends, 1)
+      : KLAVIYO_METRICS_ORIGIN;
 
     // Rodar em sequência para não estourar memória
     const shopifyResult  = await syncShopify(sb, channelIds, shopifySince);
