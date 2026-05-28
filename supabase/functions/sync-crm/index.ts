@@ -440,10 +440,11 @@ async function syncKlaviyoCampaigns(
 async function syncKlaviyoMetrics(
   sb: SupabaseClient,
   metricsSince: Date,
+  metricsUntil?: Date,
 ): Promise<{ metrics: number }> {
   const key = Deno.env.get("KLAVIYO_PRIVATE_API_KEY")!;
   const now = nowIso();
-  const today = todayDate();
+  const today = metricsUntil ?? todayDate();
 
   if (metricsSince > today) {
     console.log("Klaviyo: métricas já atualizadas");
@@ -548,6 +549,15 @@ serve(async (req) => {
       );
     }
 
+    // Parâmetros opcionais de URL para backfill histórico:
+    // ?klaviyo_only=1               → pula Shopify e Sheets (mais rápido)
+    // ?klaviyo_since=YYYY-MM-DD     → sobrescreve metricsSince
+    // ?klaviyo_until=YYYY-MM-DD     → sobrescreve metricsUntil (padrão: hoje)
+    const reqUrl = new URL(req.url);
+    const klaviyoOnly = reqUrl.searchParams.get("klaviyo_only") === "1";
+    const klaviyoSinceParam = reqUrl.searchParams.get("klaviyo_since");
+    const klaviyoUntilParam = reqUrl.searchParams.get("klaviyo_until");
+
     const sb = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -573,16 +583,25 @@ serve(async (req) => {
     // Klaviyo métricas: desde MAX(date)+1dia, ou desde fev/2026 se banco vazio.
     // Sem teto: o sync incremental retoma exatamente de onde parou.
     // Na primeira execução (banco vazio) busca o histórico completo desde o início.
+    // Params klaviyo_since/until permitem backfill mês a mês para cobrir todas as mensagens.
     const KLAVIYO_METRICS_ORIGIN = new Date("2026-02-01T00:00:00Z");
-    const metricsSince: Date = latestDates.emailSends
-      ? addDays(latestDates.emailSends, 1)
-      : KLAVIYO_METRICS_ORIGIN;
+    const metricsSince: Date = klaviyoSinceParam
+      ? new Date(klaviyoSinceParam + "T00:00:00Z")
+      : (latestDates.emailSends ? addDays(latestDates.emailSends, 1) : KLAVIYO_METRICS_ORIGIN);
+    const metricsUntil: Date | undefined = klaviyoUntilParam
+      ? new Date(klaviyoUntilParam + "T00:00:00Z")
+      : undefined;
 
     // Rodar em sequência para não estourar memória
-    const shopifyResult  = await syncShopify(sb, channelIds, shopifySince);
-    const sheetsResult   = await syncSheets(sb, channelIds);
-    const campaignResult = await syncKlaviyoCampaigns(sb, Deno.env.get("KLAVIYO_PRIVATE_API_KEY")!, channelIds);
-    const klaviyoResult  = await syncKlaviyoMetrics(sb, metricsSince);
+    let shopifyResult  = { count: 0 };
+    let sheetsResult   = { sessions: 0, utm: 0 };
+    let campaignResult = { campaigns: 0, newMessages: 0 };
+    if (!klaviyoOnly) {
+      shopifyResult  = await syncShopify(sb, channelIds, shopifySince);
+      sheetsResult   = await syncSheets(sb, channelIds);
+      campaignResult = await syncKlaviyoCampaigns(sb, Deno.env.get("KLAVIYO_PRIVATE_API_KEY")!, channelIds);
+    }
+    const klaviyoResult = await syncKlaviyoMetrics(sb, metricsSince, metricsUntil);
 
     return new Response(
       JSON.stringify({ status: "ok", shopify: shopifyResult, sheets: sheetsResult, klaviyo: klaviyoResult, campaigns: campaignResult }),
