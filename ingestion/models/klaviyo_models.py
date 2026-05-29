@@ -63,3 +63,24 @@ class KlaviyoFormMetricRow(BaseModel):
     date: date
     impressions: int = 0
     submissions: int = 0
+
+
+class KlaviyoCampaignEmailMetric(BaseModel):
+    campaign_id: str
+    campaign_name: str
+    message_id: str
+    data: date
+    email_enviado: int = 0
+    email_aberto: int = 0
+    email_clicado: int = 0
+
+
+class KlaviyoFlowEmailMetric(BaseModel):
+    flow_id: str
+    flow_name: str
+    message_id: str
+    message_name: str
+    data: date
+    email_enviado: int = 0
+    email_aberto: int = 0
+    email_clicado: int = 0

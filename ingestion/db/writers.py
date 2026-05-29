@@ -5,9 +5,11 @@ from supabase import Client
 
 from ingestion.models.klaviyo_models import (
     KlaviyoCampaign,
+    KlaviyoCampaignEmailMetric,
     KlaviyoCampaignMessage,
     KlaviyoEmailMetricRow,
     KlaviyoFlow,
+    KlaviyoFlowEmailMetric,
     KlaviyoFlowMessage,
     KlaviyoForm,
     KlaviyoFormMetricRow,
@@ -428,6 +430,49 @@ def upsert_forms(sb: Client, forms: list[KlaviyoForm]) -> int:
     } for f in forms]
     sb.table("dim_forms").upsert(records, on_conflict="external_id").execute()
     logger.info({"event": "forms_upserted", "count": len(records)})
+    return len(records)
+
+
+def upsert_flow_email_metrics(
+    sb: Client, rows: list[KlaviyoFlowEmailMetric]
+) -> int:
+    if not rows:
+        return 0
+    now = _now_iso()
+    records = [{
+        "flow_id":       r.flow_id,
+        "flow_name":     r.flow_name,
+        "message_id":    r.message_id,
+        "message_name":  r.message_name,
+        "data":          r.data.isoformat(),
+        "email_enviado": r.email_enviado,
+        "email_aberto":  r.email_aberto,
+        "email_clicado": r.email_clicado,
+        "updated_at":    now,
+    } for r in rows]
+    sb.table("flow_email_metrics").upsert(records, on_conflict="message_id,data").execute()
+    logger.info({"event": "flow_email_metrics_upserted", "count": len(records)})
+    return len(records)
+
+
+def upsert_campaign_email_metrics(
+    sb: Client, rows: list[KlaviyoCampaignEmailMetric]
+) -> int:
+    if not rows:
+        return 0
+    now = _now_iso()
+    records = [{
+        "campaign_id":   r.campaign_id,
+        "campaign_name": r.campaign_name,
+        "message_id":    r.message_id,
+        "data":          r.data.isoformat(),
+        "email_enviado": r.email_enviado,
+        "email_aberto":  r.email_aberto,
+        "email_clicado": r.email_clicado,
+        "updated_at":    now,
+    } for r in rows]
+    sb.table("campaign_email_metrics").upsert(records, on_conflict="message_id,data").execute()
+    logger.info({"event": "campaign_email_metrics_upserted", "count": len(records)})
     return len(records)
 
 
