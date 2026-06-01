@@ -3,7 +3,11 @@
     { "source": "/", "destination": "/dashboard-crm.html" }
   ],
   "functions": {
-    "api/cron/*.py": { "maxDuration": 300 }
+    "api/cron/revenue.py":        { "maxDuration": 300 },
+    "api/cron/sessions.py":       { "maxDuration": 300 },
+    "api/cron/email_flow.py":     { "maxDuration": 300 },
+    "api/cron/email_campaign.py": { "maxDuration": 300 },
+    "api/cron/forms.py":          { "maxDuration": 300 }
   },
   "crons": [
     { "path": "/api/cron/revenue",        "schedule": "*/35 * * * *" },
