@@ -1,4 +1,4 @@
-"""Cron: atualiza métricas de e-mail de fluxos → fact_email_sends.
+"""Cron: atualiza métricas de e-mail de fluxos → flow_email_metrics.
 Chamado pela Vercel todo dia às 7h UTC (4h BRT).
 """
 from http.server import BaseHTTPRequestHandler
@@ -28,8 +28,8 @@ class handler(BaseHTTPRequestHandler):
         try:
             from dotenv import load_dotenv
             load_dotenv()
-            from ingestion.main import run_email_flow_ingestion
-            run_email_flow_ingestion()
+            from ingestion.flow_metrics_daily import run_yesterday
+            run_yesterday()
             from ingestion.alert import log_cron
             log_cron("email_flow", "ok")
             self._json(200, {"status": "ok", "job": "email_flow"})
