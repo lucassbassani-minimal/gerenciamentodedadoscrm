@@ -1572,11 +1572,20 @@ async function renderFlowUtmAlert(flowRows, itemRows) {
   const old = page.querySelector('#flow-utm-alert');
   if (old) old.remove();
 
-  const flowsWithUtm = new Set(flowRows.filter(r => r.has_utm).map(r => r.asset_id).filter(Boolean));
-  const flowsSemUtm  = [...new Set(flowRows.filter(r => !r.has_utm).map(r => r.asset_name))];
-  const emailsSemTerm = [...new Set(itemRows.filter(p =>
-    flowsWithUtm.has(p.asset_id) && !/LEADS|CLIENTES/i.test(p.item_name || '')
-  ).map(p => p.item_name))];
+  // Fluxos sem UTM: utm_campaign nulo ou vazio
+  const flowsSemUtm = [...new Set(
+    flowRows.filter(r => !r.utm_campaign).map(r => r.asset_name)
+  )];
+
+  // E-mails cujo fluxo tem UTM mas o nome não tem [LEADS]/[CLIENTES]
+  const flowsComUtm = new Set(
+    flowRows.filter(r => r.utm_campaign).map(r => r.asset_name)
+  );
+  const emailsSemTerm = [...new Set(
+    itemRows
+      .filter(p => !/LEADS|CLIENTES/i.test(p.item_name || ''))
+      .map(p => p.item_name)
+  )];
 
   const nFluxos = flowsSemUtm.length;
   const nEmails = emailsSemTerm.length;
