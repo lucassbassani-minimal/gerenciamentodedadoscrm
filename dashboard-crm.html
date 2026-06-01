@@ -1347,7 +1347,7 @@ async function renderChannel(key){
     {label:'Conversão',   val:s.sessions>0?fmtPct(conv):'—',                     delta:s.sessions>0&&compTotals.sessions>0?_deltaBadge(conv,compConv):''},
   ];
   if(isEmail && key === 'ef'){
-    kpis.push({label:'CTOR', val:em.opens>0?fmtPct1(safe(em.clicks,em.opens)):'—', highlight:true, delta:''});
+    kpis.push({label:'Receita / Inscrito', val:inscritos>0?fmtBRL2(safe(s.rev,inscritos)):'—', highlight:true, delta:''});
   } else if(isEmail && key === 'ec'){
     kpis.push({label:'Receita / Disparo', val:em.sends>0?fmtBRL2(safe(s.rev,em.sends)):'—', highlight:true, delta:''});
   } else if(cfg.topPerDisparo){
