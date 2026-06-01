@@ -1252,11 +1252,16 @@ async function renderChannel(key){
     allRows = results[0]; revByType = results[1];
     allCompRows = results[2]; compRevByType = results[3];
     if (isEmail) { emailDaily = results[4]; emailAssetRows = results[5]; }
+    let inscritos = 0;
     if (key === 'ef' && results[6]) {
       for (const item of results[6]) {
         if (!flowItemsMap[item.asset_id]) flowItemsMap[item.asset_id] = [];
         flowItemsMap[item.asset_id].push(item);
       }
+      // Inscritos = soma de disparos dos e-mails EM001 de cada fluxo
+      inscritos = results[6]
+        .filter(item => /EM001/i.test(item.item_name || ''))
+        .reduce((sum, item) => sum + (+item.sends || 0), 0);
     }
   } catch(err) {
     document.getElementById('kpi-'+key).innerHTML =
@@ -1422,8 +1427,10 @@ async function renderChannel(key){
       {label:'Taxa de Abertura', val:em.sends>0?fmtPct1(safe(em.opens,em.sends)):'—'},
       {label:'Cliques',          val:fmtInt(em.clicks)},
       {label:'CTOR',             val:em.opens>0?fmtPct1(safe(em.clicks,em.opens)):'—'},
-      ...(key==='ef' ? [{label:'Descadastros',val:fmtInt(em.unsubscribes)},{label:'Bounces',val:fmtInt(em.bounces)}] : []),
-      {label:'Receita / Disparo',val:em.sends>0?fmtBRL2(safe(s.rev,em.sends)):'—'},
+      ...(key==='ec' ? [{label:'Descadastros',val:fmtInt(em.unsubscribes)},{label:'Bounces',val:fmtInt(em.bounces)}] : []),
+      key==='ef'
+        ? {label:'Receita / Inscrito', val:inscritos>0?fmtBRL2(safe(s.rev,inscritos)):'—'}
+        : {label:'Receita / Disparo',  val:em.sends>0?fmtBRL2(safe(s.rev,em.sends)):'—'},
     ];
   } else if(isCommunity){
     const entradas = Math.round(participantes*0.12);
