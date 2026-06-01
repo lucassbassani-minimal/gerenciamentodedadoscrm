@@ -28,11 +28,13 @@ class handler(BaseHTTPRequestHandler):
         try:
             from dotenv import load_dotenv
             load_dotenv()
-            from ingestion.main import run_shopify_ingestion
-            run_shopify_ingestion()
+            from ingestion.main import run_smart_shopify_ingestion
+            run_smart_shopify_ingestion()
             self._json(200, {"status": "ok", "job": "revenue"})
         except Exception as e:
             logger.error({"event": "cron_failed", "job": "revenue", "error": str(e)})
+            from api.cron._alert import send_failure_alert
+            send_failure_alert("revenue", str(e))
             self._json(500, {"error": str(e)})
 
     def _json(self, code: int, body: dict) -> None:

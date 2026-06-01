@@ -183,6 +183,24 @@ def run_shopify_ingestion() -> None:
     logger.info("=== Shopify: ingestão finalizada ===")
 
 
+def run_smart_shopify_ingestion() -> None:
+    """Busca apenas pedidos posteriores ao último registrado no banco (com 2 dias de buffer)."""
+    logger.info("=== Shopify (smart): início ===")
+    today = date.today()
+    sb = get_supabase_client()
+    channel_ids = writers.get_channel_ids(sb)
+    latest = writers.get_latest_dates(sb)
+    if latest["orders"]:
+        since = latest["orders"] - timedelta(days=SHOPIFY_BUFFER_DAYS)
+        since = max(since, today - timedelta(days=SHOPIFY_DAYS_LOOKBACK))
+    else:
+        since = today - timedelta(days=SHOPIFY_DAYS_LOOKBACK)
+    logger.info({"event": "smart_shopify_since", "since": since.isoformat()})
+    orders = shopify_source.fetch_paid_orders_since(since)
+    writers.upsert_orders(sb, orders, channel_ids)
+    logger.info("=== Shopify (smart): finalizado ===")
+
+
 def run_sheets_ingestion() -> None:
     logger.info("=== Google Sheets: início da ingestão ===")
     sb = get_supabase_client()

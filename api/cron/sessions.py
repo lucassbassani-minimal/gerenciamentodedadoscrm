@@ -29,10 +29,12 @@ class handler(BaseHTTPRequestHandler):
             from dotenv import load_dotenv
             load_dotenv()
             from ingestion.main import run_sheets_ingestion
-            run_sheets_ingestion()
+            run_sheets_ingestion()  # Sheets entrega tudo via CSV — upsert garante idempotência
             self._json(200, {"status": "ok", "job": "sessions"})
         except Exception as e:
             logger.error({"event": "cron_failed", "job": "sessions", "error": str(e)})
+            from api.cron._alert import send_failure_alert
+            send_failure_alert("sessions", str(e))
             self._json(500, {"error": str(e)})
 
     def _json(self, code: int, body: dict) -> None:
