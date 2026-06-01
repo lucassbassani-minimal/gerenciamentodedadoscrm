@@ -1233,7 +1233,7 @@ async function renderChannel(key){
   const comp = getComparisonPeriod(start, end);
 
   let allRows = [], revByType = [], allCompRows = [], compRevByType = [];
-  let emailDaily = [], emailAssetRows = [], flowItemsMap = {};
+  let emailDaily = [], emailAssetRows = [], flowItemsMap = {}, inscritos = 0;
   try {
     const fetches = [
       fetchChannelData(start, end),
@@ -1252,7 +1252,6 @@ async function renderChannel(key){
     allRows = results[0]; revByType = results[1];
     allCompRows = results[2]; compRevByType = results[3];
     if (isEmail) { emailDaily = results[4]; emailAssetRows = results[5]; }
-    let inscritos = 0;
     if (key === 'ef' && results[6]) {
       for (const item of results[6]) {
         if (!flowItemsMap[item.asset_id]) flowItemsMap[item.asset_id] = [];
