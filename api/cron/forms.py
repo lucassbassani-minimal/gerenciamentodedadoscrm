@@ -33,7 +33,7 @@ class handler(BaseHTTPRequestHandler):
             self._json(200, {"status": "ok", "job": "forms"})
         except Exception as e:
             logger.error({"event": "cron_failed", "job": "forms", "error": str(e)})
-            from api.cron._alert import send_failure_alert
+            from ingestion.alert import send_failure_alert
             send_failure_alert("forms", str(e))
             self._json(500, {"error": str(e)})
 
