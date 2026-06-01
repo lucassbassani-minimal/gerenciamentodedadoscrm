@@ -1398,16 +1398,24 @@ async function renderChannel(key){
                 y:{ticks:{callback:v=>fmtBRL2(v),font:{size:10}},grid:{color:'#f1f4f8'}}}}
     });
   } else if(isEmail){
-    // E-mail Fluxo: Disparos + Aberturas
+    // E-mail Fluxo: Receita / Inscrito por dia
+    const revPorInscrito = dates.map(d => {
+      const rev = byDay[d]?.revenue_brl || 0;
+      return (inscritos > 0 && rev > 0) ? rev / inscritos : null;
+    });
     mkChart('chart-eff-'+key,{
       type:'line',
-      data:{labels:dlabels,datasets:[
-        {label:'Disparos', data:dates.map(d=>+emByDay[d]?.sends||0), borderColor:ch.color, backgroundColor:ch.color+'22', fill:false, tension:.35, pointRadius:0, borderWidth:2},
-        {label:'Aberturas',data:dates.map(d=>+emByDay[d]?.opens||0), borderColor:'#10b981',  backgroundColor:'#10b98122', fill:false, tension:.35, pointRadius:0, borderWidth:1.5, borderDash:[4,3]},
-      ]},
+      data:{labels:dlabels,datasets:[{
+        label:'Receita / Inscrito',
+        data:revPorInscrito,
+        borderColor:ch.color, backgroundColor:ch.color+'22',
+        fill:true, tension:.35, pointRadius:3, pointBackgroundColor:ch.color, borderWidth:2,
+        spanGaps:false,
+      }]},
       options:{responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmtInt(c.parsed.y)}}},
-        scales:{x:{grid:{display:false},ticks:{font:{size:9},maxRotation:0}},y:{ticks:{callback:v=>fmtInt(v),font:{size:10}},grid:{color:'#f1f4f8'}}}}
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'R$/inscrito: '+fmtBRL2(c.parsed.y)}}},
+        scales:{x:{grid:{display:false},ticks:{font:{size:9},maxRotation:0}},
+                y:{ticks:{callback:v=>fmtBRL2(v),font:{size:10}},grid:{color:'#f1f4f8'}}}}
     });
   } else {
     const dailyBase = disparos/Math.max(dates.length,1);
