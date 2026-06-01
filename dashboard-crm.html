@@ -390,6 +390,7 @@ tr.nested td:first-child{padding-left:36px;color:var(--muted)}
 </section>
 
 <section class="page" id="page-ef"></section>
+<div id="flow-utm-alert" style="display:none"></div>
 <section class="page" id="page-ec"></section>
 <section class="page" id="page-wf"></section>
 <section class="page" id="page-wc"></section>
@@ -1511,6 +1512,7 @@ async function renderChannel(key){
     : emailAssetRows;
   if(isEmail && displayAssetRows.length > 0){
     renderEmailAssetTable(key, displayAssetRows, ch.color, flowItemsMap);
+    if(key === 'ef') renderFlowUtmAlert(displayAssetRows, results[6] || []);
   } else if(!isEmail){
     // WPP/Community: tabela mock
     const assets = ASSETS[key];
@@ -1559,6 +1561,57 @@ function heatColor(val,min,max){
   return 'rgba(239,68,68,.12);color:#991b1b';
 }
 
+// =========================================
+// ALERTA DE UTMs PENDENTES — E-mail Fluxo
+// =========================================
+async function renderFlowUtmAlert(flowRows, itemRows) {
+  const el = document.getElementById('flow-utm-alert');
+  if (!el) return;
+
+  // Fluxos sem UTM
+  const flowsSemUtm = flowRows.filter(r => !r.has_utm).map(r => r.asset_name);
+  // E-mails sem term identificável (não tem LEADS nem CLIENTES no nome)
+  const emailsSemTerm = itemRows.filter(p => {
+    if (!p.has_utm) return false; // fluxo já sem UTM — não duplicar alerta
+    return !/LEADS|CLIENTES/i.test(p.item_name || '');
+  }).map(p => p.item_name);
+
+  const problemas = [...new Set([...flowsSemUtm, ...emailsSemTerm])];
+  if (problemas.length === 0) { el.style.display = 'none'; return; }
+
+  el.style.display = '';
+  el.innerHTML = `
+    <div style="background:#fffbeb;border:1px solid #f59e0b;border-radius:8px;padding:16px;margin-top:16px">
+      <div style="font-weight:600;color:#92400e;margin-bottom:8px">⚠ ${problemas.length} fluxo(s)/e-mail(s) sem UTM configurada</div>
+      <div style="font-size:12px;color:#78350f;margin-bottom:10px">
+        Os itens abaixo não têm UTM configurada ou o nome não segue o padrão [LEADS]/[CLIENTES].
+        Preencha abaixo e salve para enviar a configuração.
+      </div>
+      <ul style="font-size:12px;color:#92400e;margin:0 0 12px 16px">
+        ${problemas.map(p => `<li>${p}</li>`).join('')}
+      </ul>
+      <textarea id="utm-pending-msg" rows="4" style="width:100%;font-size:12px;padding:8px;border:1px solid #f59e0b;border-radius:4px;box-sizing:border-box"
+        placeholder="Descreva as UTMs corretas para cada item acima (ex: [Fluxo X] → utm_campaign: fluxo-x)"></textarea>
+      <button onclick="saveUtmPending()" style="margin-top:8px;background:#f59e0b;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;font-size:13px">
+        Salvar configuração
+      </button>
+      <span id="utm-pending-status" style="font-size:12px;margin-left:10px;color:#78350f"></span>
+    </div>`;
+}
+
+async function saveUtmPending() {
+  const msg = document.getElementById('utm-pending-msg')?.value?.trim();
+  const statusEl = document.getElementById('utm-pending-status');
+  if (!msg) { if(statusEl) statusEl.textContent = 'Escreva a configuração antes de salvar.'; return; }
+  const { error } = await _sb.from('flow_utm_pending').insert({
+    flow_name: 'múltiplos', email_name: null,
+    issue: 'utm_config_pendente', mensagem: msg
+  });
+  if (error) { if(statusEl) statusEl.textContent = 'Erro ao salvar. Tente novamente.'; return; }
+  if(statusEl) statusEl.textContent = '✓ Salvo! Na próxima sessão com Claude, mencione que há UTMs pendentes.';
+  document.getElementById('utm-pending-msg').value = '';
+}
+
 function renderEmailAssetTable(key, rows, color, flowItems){
   flowItems = flowItems || {};
   const maxSends = Math.max(...rows.map(r=>+r.sends||0), 1);
@@ -1588,8 +1641,12 @@ function renderEmailAssetTable(key, rows, color, flowItems){
       const expandable = pieces.length > 0;
       const arrow = expandable ? '<span class="expand-arrow">›</span>' : '<span style="display:inline-block;width:18px"></span>';
       const flowInscritos = pieces.filter(p => /EM001/i.test(p.item_name||'')).reduce((s,p)=>s+(+p.sends||0),0);
-      const flowReceita = 0; // receita por UTM a implementar
-      const recInscrito = flowInscritos > 0 ? fmtBRL2(flowReceita / flowInscritos) : '—';
+      const flowReceita = +r.revenue_brl || 0;
+      const hasUtm = r.has_utm;
+      const receitaDisplay = !hasUtm
+        ? '<span style="color:#f59e0b;font-size:11px">⚠ sem UTM</span>'
+        : fmtBRLfull(flowReceita);
+      const recInscrito = (!hasUtm || flowInscritos === 0) ? '—' : fmtBRL2(flowReceita / flowInscritos);
       const sends=+r.sends||0;
       parts.push(`<tr class="${expandable?'expandable':''}" ${expandable?`onclick="toggleNested('ef-${idx}')"`:''}>
         <td>${arrow}<strong>${r.asset_name||'—'}</strong> ${statusDot}</td>
@@ -1599,7 +1656,7 @@ function renderEmailAssetTable(key, rows, color, flowItems){
         <td class="num">${openRate}</td>
         <td class="num">${fmtInt(clicks)}</td>
         <td class="num">${ctor}</td>
-        <td class="num">—</td>
+        <td class="num">${receitaDisplay}</td>
         <td class="num">${recInscrito}</td>
       </tr>`);
       if (expandable) {
@@ -1615,11 +1672,17 @@ function renderEmailAssetTable(key, rows, color, flowItems){
           <td class="nested-header num">Rec./Insc.</td>
         </tr>`);
         pieces.forEach(p => {
-          const po=+p.opens||0, pc=+p.clicks||0, pu=+p.unsubscribes||0;
+          const po=+p.opens||0, pc=+p.clicks||0;
           const por = (+p.open_rate_pct||0) > 0 ? p.open_rate_pct+'%' : '—';
           const pct = (+p.ctor_pct||0)      > 0 ? p.ctor_pct+'%'      : '—';
           const isEM001 = /EM001/i.test(p.item_name||'');
           const pInscritos = isEM001 ? fmtInt(+p.sends||0) : '—';
+          const pRev = p.revenue_brl;
+          const pRevDisplay = pRev === null
+            ? '<span style="color:#f59e0b;font-size:11px">⚠ sem UTM</span>'
+            : fmtBRLfull(+pRev||0);
+          const pEM001sends = isEM001 ? (+p.sends||0) : 0;
+          const pRecInsc = (pRev !== null && pEM001sends > 0) ? fmtBRL2((+pRev||0)/pEM001sends) : '—';
           parts.push(`<tr class="nested" data-parent="ef-${idx}">
             <td>↳ ${p.item_name||'—'}</td>
             <td class="num">${pInscritos}</td>
@@ -1628,8 +1691,8 @@ function renderEmailAssetTable(key, rows, color, flowItems){
             <td class="num">${por}</td>
             <td class="num">${fmtInt(pc)}</td>
             <td class="num">${pct}</td>
-            <td class="num">—</td>
-            <td class="num">—</td>
+            <td class="num">${pRevDisplay}</td>
+            <td class="num">${pRecInsc}</td>
           </tr>`);
         });
       }
