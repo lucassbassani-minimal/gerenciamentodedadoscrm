@@ -1,11 +1,6 @@
 {
-  "builds": [
-    { "src": "dashboard-crm.html", "use": "@vercel/static" },
-    { "src": "api/cron/*.py",      "use": "@vercel/python" }
-  ],
-  "routes": [
-    { "src": "/api/cron/(.*)", "dest": "/api/cron/$1" },
-    { "src": "/",              "dest": "/dashboard-crm.html" }
+  "rewrites": [
+    { "source": "/", "destination": "/dashboard-crm.html" }
   ],
   "crons": [
     { "path": "/api/cron/revenue",        "schedule": "*/35 * * * *" },
