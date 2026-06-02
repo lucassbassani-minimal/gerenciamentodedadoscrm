@@ -14,6 +14,15 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+_ROOT = os.path.join(os.path.dirname(__file__), '..', '..')
+
+@app.route('/')
+@app.route('/dashboard-crm.html')
+def dashboard():
+    path = os.path.join(_ROOT, 'dashboard-crm.html')
+    with open(path, 'r', encoding='utf-8') as f:
+        return f.read(), 200, {'Content-Type': 'text/html; charset=utf-8'}
+
 
 def _authorized() -> bool:
     secret = os.environ.get('CRON_SECRET', '')
