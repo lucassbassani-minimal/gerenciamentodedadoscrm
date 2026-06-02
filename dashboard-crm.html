@@ -1604,30 +1604,39 @@ async function renderChannel(key){
     renderEmailAssetTable(key, displayAssetRows, ch.color, flowItemsMap);
     if(key === 'ef') renderFlowUtmAlert(displayAssetRows, emailFlowItemRows);
 
-    // Rankings E-mail Fluxo — sempre com todos os fluxos (ignorar filtro ativo)
+    // Rankings E-mail Fluxo — 2 critérios: Receita e Receita/Inscrito
     if(key === 'ef' && emailAssetRows.length > 0){
       const maxRev = Math.max(...emailAssetRows.map(r=>+r.revenue_brl||0), 1);
-      const maxSends = Math.max(...emailAssetRows.map(r=>+r.sends||0), 1);
-      const byRevDesc  = [...emailAssetRows].sort((a,b)=>(+b.revenue_brl||0)-(+a.revenue_brl||0));
-      const byRecInsc  = [...emailAssetRows].filter(r=>+r.revenue_brl>0).sort((a,b)=>{
-        const ai = emailFlowItemRows.filter(p=>p.asset_id===a.asset_id&&/EM001/i.test(p.item_name||'')).reduce((s,p)=>s+(+p.sends||0),0);
-        const bi = emailFlowItemRows.filter(p=>p.asset_id===b.asset_id&&/EM001/i.test(p.item_name||'')).reduce((s,p)=>s+(+p.sends||0),0);
-        const ar = ai>0?(+a.revenue_brl||0)/ai:0;
-        const br = bi>0?(+b.revenue_brl||0)/bi:0;
-        return br-ar;
+      const getInsc = r => emailFlowItemRows
+        .filter(p=>p.asset_id===r.asset_id&&/EM001/i.test(p.item_name||''))
+        .reduce((s,p)=>s+(+p.sends||0),0);
+      const getRI = r => { const i=getInsc(r); return i>0?(+r.revenue_brl||0)/i:0; };
+
+      const byRevDesc = [...emailAssetRows].sort((a,b)=>(+b.revenue_brl||0)-(+a.revenue_brl||0));
+      const byRecInsc = [...emailAssetRows].filter(r=>+r.revenue_brl>0&&getInsc(r)>0).sort((a,b)=>getRI(b)-getRI(a));
+      const maxRI = Math.max(...byRecInsc.map(r=>getRI(r)), 1);
+
+      // Ranking 1: Top 5 por Receita
+      document.getElementById('rank-best-'+key).innerHTML =
+        byRevDesc.slice(0,5).map((r,i)=>rankRow(i+1,r.asset_name,fmtBRLfull(+r.revenue_brl||0),(+r.revenue_brl||0)/maxRev,ch.color)).join('');
+
+      // Ranking 2: Top 5 por Receita/Inscrito
+      document.getElementById('rank-best-eff-'+key).innerHTML =
+        byRecInsc.slice(0,5).map((r,i)=>rankRow(i+1,r.asset_name,fmtBRL2(getRI(r)),getRI(r)/maxRI,ch.color)).join('');
+
+      // Oculta os 2 cards não usados
+      ['rank-worst-'+key,'rank-worst-eff-'+key].forEach(id=>{
+        const el = document.getElementById(id);
+        if(el && el.closest('.card')) el.closest('.card').style.display='none';
       });
-      document.getElementById('rank-best-'+key).innerHTML    = byRevDesc.slice(0,5).map((r,i)=>rankRow(i+1,r.asset_name,fmtBRLfull(+r.revenue_brl||0),(+r.revenue_brl||0)/maxRev,ch.color)).join('');
-      document.getElementById('rank-worst-'+key).innerHTML   = byRevDesc.slice(-5).reverse().map((r,i)=>rankRow(i+1,r.asset_name,fmtInt(+r.sends||0),(+r.sends||0)/maxSends,'#94a3b8')).join('');
-      document.getElementById('rank-best-eff-'+key).innerHTML = byRecInsc.slice(0,5).map((r,i)=>{
-        const insc = emailFlowItemRows.filter(p=>p.asset_id===r.asset_id&&/EM001/i.test(p.item_name||'')).reduce((s,p)=>s+(+p.sends||0),0);
-        const ri = insc>0?(+r.revenue_brl||0)/insc:0;
-        return rankRow(i+1,r.asset_name,fmtBRL2(ri),ri/(+byRecInsc[0]?.revenue_brl||1),ch.color);
-      }).join('');
-      document.getElementById('rank-worst-eff-'+key).innerHTML = byRecInsc.slice(-5).reverse().map((r,i)=>{
-        const insc = emailFlowItemRows.filter(p=>p.asset_id===r.asset_id&&/EM001/i.test(p.item_name||'')).reduce((s,p)=>s+(+p.sends||0),0);
-        const ri = insc>0?(+r.revenue_brl||0)/insc:0;
-        return rankRow(i+1,r.asset_name,fmtBRL2(ri),ri/(+byRecInsc[0]?.revenue_brl||1),'#94a3b8');
-      }).join('');
+
+      // Atualiza títulos dos 2 cards visíveis
+      const bestEl = document.getElementById('rank-best-'+key);
+      if(bestEl && bestEl.closest('.card'))
+        bestEl.closest('.card').querySelector('.card-title').textContent = 'Top 5 · Receita';
+      const effEl = document.getElementById('rank-best-eff-'+key);
+      if(effEl && effEl.closest('.card'))
+        effEl.closest('.card').querySelector('.card-title').textContent = 'Top 5 · Receita / Inscrito';
     }
   } else if(!isEmail){
     // WPP/Community: tabela mock
