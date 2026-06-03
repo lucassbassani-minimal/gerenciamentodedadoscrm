@@ -1,0 +1,1389 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Log de Ações CRM · Minimal Club</title>
+<style>
+:root{
+  --bg:#f7f8fa; --card:#fff; --border:#e6eaf0; --text:#0f1b2d; --muted:#6b7785;
+  --primary:#2563eb; --success:#10b981; --warning:#f59e0b; --danger:#ef4444;
+  --shadow:0 1px 3px rgba(15,27,45,.05);
+  --shadow-lg:0 10px 25px rgba(15,27,45,.12);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);font-size:13px;line-height:1.5}
+header{background:#fff;border-bottom:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:8}
+.brand{font-size:18px;font-weight:700;letter-spacing:-.2px}
+.brand span{color:var(--primary)}
+.brand small{display:block;font-size:11px;color:var(--muted);font-weight:500;letter-spacing:0;margin-top:2px}
+.header-actions{display:flex;gap:8px}
+
+.btn{background:var(--primary);color:#fff;border:none;padding:8px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:.15s;text-decoration:none}
+.btn:hover{background:#1e40af}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
+.btn-ghost:hover{background:#f4f7fb;color:var(--text)}
+.btn-warn{background:var(--warning)}
+.btn-warn:hover{background:#d97706}
+.btn-danger{background:var(--danger)}
+.btn-danger:hover{background:#dc2626}
+.btn-success{background:var(--success)}
+.btn-success:hover{background:#059669}
+.btn-sm{padding:5px 10px;font-size:11px}
+
+nav.tabs{background:#fff;border-bottom:1px solid var(--border);padding:0 28px;display:flex;gap:6px}
+nav.tabs button{background:transparent;border:none;padding:14px 18px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:.15s}
+nav.tabs button:hover{color:var(--text)}
+nav.tabs button.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:600}
+
+main{padding:20px 28px;max-width:1500px;margin:0 auto}
+.page{display:none}
+.page.active{display:block}
+
+.sub-tabs{display:inline-flex;gap:4px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:4px;margin-bottom:18px;box-shadow:var(--shadow)}
+.sub-tabs button{background:transparent;border:none;padding:7px 14px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;border-radius:5px;white-space:nowrap}
+.sub-tabs button:hover{color:var(--text)}
+.sub-tabs button.active{background:#0f1b2d;color:#fff}
+
+.sub-page{display:none}
+.sub-page.active{display:block}
+
+.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.search-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.search-row select,.search-row input{border:1px solid var(--border);background:#fff;padding:7px 10px;border-radius:6px;font-size:12px;color:var(--text);min-width:140px}
+.search-row input[type=search]{min-width:220px}
+.search-row select:focus,.search-row input:focus{outline:none;border-color:var(--primary)}
+
+.section-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:18px 0 10px}
+
+.grid{display:grid;gap:14px}
+.grid-3{grid-template-columns:repeat(3,1fr)}
+.grid-4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:900px){.grid-3,.grid-4{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;box-shadow:var(--shadow)}
+.card-title{font-size:12px;color:var(--muted);font-weight:500;margin-bottom:6px}
+.kpi-value{font-size:22px;font-weight:700;letter-spacing:-.5px;color:var(--text)}
+.kpi-sub{font-size:11px;color:var(--muted);margin-top:3px}
+
+/* Tables */
+.table-wrap{background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:var(--shadow)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead th{background:#f8fafc;text-align:left;padding:11px 14px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;border-bottom:1px solid var(--border)}
+tbody td{padding:12px 14px;border-bottom:1px solid #f1f4f8;vertical-align:middle}
+tbody tr{cursor:pointer;transition:background .12s}
+tbody tr:hover{background:#fafbfd}
+.title-cell{font-weight:600;color:var(--text)}
+.title-cell .kind-badge{display:inline-block;padding:1px 7px;border-radius:8px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-right:6px;vertical-align:middle}
+.kb-action{background:#dbeafe;color:#1e40af}
+.kb-test{background:#fef3c7;color:#92400e}
+.tag{display:inline-block;padding:2px 9px;border-radius:10px;font-size:10px;font-weight:600;letter-spacing:.3px;white-space:nowrap}
+.tag-status-planned{background:#f1f4f8;color:#475569}
+.tag-status-running{background:#dbeafe;color:#1e40af}
+.tag-status-done{background:#d1fae5;color:#047857}
+.tag-status-paused{background:#fef3c7;color:#92400e}
+.tag-status-cancelled{background:#fee2e2;color:#991b1b}
+.tag-result-positive{background:#d1fae5;color:#047857}
+.tag-result-neutral{background:#f1f4f8;color:#475569}
+.tag-result-negative{background:#fee2e2;color:#991b1b}
+.tag-type-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
+
+.empty-state{text-align:center;padding:50px 20px;color:var(--muted);background:#fff;border:1px solid var(--border);border-radius:10px}
+.empty-state h3{font-size:15px;color:var(--text);margin-bottom:6px;font-weight:600}
+.empty-state p{font-size:13px;margin-bottom:14px}
+
+/* Test card (Em andamento) */
+.test-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;box-shadow:var(--shadow);transition:.15s}
+.test-card:hover{border-color:var(--primary)}
+.test-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px}
+.test-card-head h4{font-size:14px;font-weight:700;flex:1}
+.test-card-meta{font-size:11px;color:var(--muted);margin-bottom:10px}
+.test-card-info{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;padding:10px 12px;background:#fafbfd;border-radius:6px;font-size:11.5px}
+.test-card-info .lbl{font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.4px;margin-bottom:3px}
+.test-card-info .val{font-weight:600;color:var(--text)}
+.test-card-actions{display:flex;gap:6px;justify-content:flex-end}
+
+/* Calendar */
+.calendar-wrap{background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);overflow:hidden}
+.calendar-header{padding:12px 18px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);background:#fafbfd;flex-wrap:wrap;gap:10px}
+.cal-nav{display:flex;align-items:center;gap:8px}
+.cal-nav button{background:#fff;border:1px solid var(--border);width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:14px;color:var(--text);font-weight:700}
+.cal-nav button:hover{background:#eef4ff;border-color:var(--primary);color:var(--primary)}
+.cal-month{font-size:15px;font-weight:700;min-width:170px;text-align:center}
+.cal-color-toggle{display:flex;gap:4px;align-items:center;font-size:11px;color:var(--muted)}
+.cal-color-toggle button{background:transparent;border:1px solid var(--border);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer}
+.cal-color-toggle button.active{background:var(--primary);border-color:var(--primary);color:#fff}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);background:var(--border)}
+.cal-dow{background:#f8fafc;padding:8px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:center}
+.cal-day{background:#fff;min-height:96px;padding:5px 5px 4px;position:relative;display:flex;flex-direction:column;gap:2px}
+.cal-day.other-month{background:#fafbfd;opacity:.55}
+.cal-day.today{background:#f0f7ff}
+.cal-day.drag-over{background:#dbeafe;outline:2px dashed var(--primary);outline-offset:-3px}
+.cal-day-num{font-size:11px;font-weight:700;color:var(--muted);position:absolute;top:5px;right:7px}
+.cal-day.today .cal-day-num{background:var(--primary);color:#fff;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;top:4px;right:4px}
+.cal-event{background:var(--primary);color:#fff;padding:3px 7px;border-radius:4px;font-size:10.5px;font-weight:600;cursor:grab;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;margin-top:18px;border-left:3px solid rgba(0,0,0,.25)}
+.cal-event:not(:first-of-type){margin-top:0}
+.cal-event:hover{filter:brightness(1.08)}
+.cal-event:active{cursor:grabbing}
+.cal-event-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#fff;margin-right:4px;vertical-align:middle;opacity:.8}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--muted);padding:9px 18px;background:#fafbfd;border-bottom:1px solid var(--border)}
+.legend-item{display:flex;align-items:center;gap:5px}
+.legend-dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+/* Campaign calendar */
+.cal-add-btn{position:absolute;bottom:4px;right:4px;width:20px;height:20px;border-radius:50%;background:var(--primary);color:#fff;border:none;cursor:pointer;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s, transform .15s;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.2);z-index:2}
+.cal-day:hover .cal-add-btn{opacity:1}
+.cal-add-btn:hover{transform:scale(1.15);background:#1e40af}
+.cal-event.campaign{font-size:10.5px;padding:3px 7px}
+
+/* Multi-select grids */
+.multi-select-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:5px}
+.multi-select-grid.times{grid-template-columns:repeat(4,1fr)}
+.multi-select-item{display:flex;align-items:center;gap:6px;padding:7px 10px;background:#fff;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;transition:.12s;user-select:none}
+.multi-select-item:hover{border-color:var(--primary)}
+.multi-select-item.active{background:#dbeafe;border-color:var(--primary);color:#1e40af;font-weight:600}
+.multi-select-item input{display:none}
+.chip{display:inline-block;padding:3px 9px;background:#dbeafe;color:#1e40af;border-radius:10px;font-size:11px;font-weight:600;margin-right:4px;margin-bottom:4px}
+.chip.warm{background:#fef3c7;color:#92400e}
+.chip.cold{background:#cffafe;color:#0e7490}
+.chip.hot{background:#fee2e2;color:#991b1b}
+
+/* Side panel */
+.panel-overlay{position:fixed;inset:0;background:rgba(15,27,45,.35);opacity:0;visibility:hidden;transition:.2s;z-index:50}
+.panel-overlay.open{opacity:1;visibility:visible}
+.side-panel{position:fixed;top:0;right:0;width:460px;height:100vh;background:#fff;box-shadow:var(--shadow-lg);transform:translateX(100%);transition:transform .25s;z-index:51;overflow-y:auto;display:flex;flex-direction:column}
+.side-panel.open{transform:translateX(0)}
+.panel-head{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#fff;z-index:2}
+.panel-head h2{font-size:16px;font-weight:700}
+.panel-close{background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--muted);width:30px;height:30px;border-radius:6px;display:flex;align-items:center;justify-content:center}
+.panel-close:hover{background:#f4f7fb;color:var(--text)}
+.panel-body{padding:18px 22px;flex:1}
+.panel-foot{padding:14px 22px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:#fafbfd;position:sticky;bottom:0}
+
+.form-row{margin-bottom:13px}
+.form-row label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:5px}
+.form-row label .required{color:var(--danger)}
+.form-row input,.form-row select,.form-row textarea{width:100%;border:1px solid var(--border);background:#fff;padding:8px 11px;border-radius:6px;font-size:13px;color:var(--text);font-family:inherit}
+.form-row input:focus,.form-row select:focus,.form-row textarea:focus{outline:none;border-color:var(--primary)}
+.form-row textarea{resize:vertical;min-height:56px;line-height:1.5}
+.form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.form-section{padding:12px 14px;background:#fef3c7;border-radius:8px;margin-bottom:14px;border-left:3px solid #f59e0b}
+.form-section-title{font-size:11px;color:#92400e;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.form-section.finish{background:#d1fae5;border-left-color:#10b981}
+.form-section.finish .form-section-title{color:#047857}
+
+.detail-meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;padding:14px;background:#fafbfd;border-radius:8px}
+.detail-meta-item .lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:3px}
+.detail-meta-item .val{font-size:13px;color:var(--text);font-weight:500}
+.detail-section{margin-bottom:16px}
+.detail-section h4{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:6px}
+.detail-section p{font-size:13px;color:var(--text);line-height:1.55;white-space:pre-wrap}
+.impact-card{padding:14px;border-radius:8px;display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.impact-card.positive{background:#d1fae5;color:#047857}
+.impact-card.neutral{background:#f1f4f8;color:#475569}
+.impact-card.negative{background:#fee2e2;color:#991b1b}
+.impact-icon{font-size:22px;font-weight:700;width:42px;height:42px;background:rgba(255,255,255,.6);border-radius:50%;display:flex;align-items:center;justify-content:center}
+.impact-text strong{display:block;font-size:13px;margin-bottom:2px}
+.impact-text span{font-size:11px;opacity:.85}
+.delta-row{display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid var(--border);padding:10px 14px;border-radius:6px;margin-top:8px;font-size:12px}
+
+/* Biblioteca */
+.lib-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:900px){.lib-grid{grid-template-columns:1fr}}
+.lib-col{background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;box-shadow:var(--shadow)}
+.lib-col h3{font-size:14px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.lib-col h3 .pill{font-size:10px;color:var(--muted);background:#f1f4f8;padding:2px 8px;border-radius:10px;font-weight:600}
+.lib-col.success h3{color:var(--success)}
+.lib-col.fail h3{color:var(--danger)}
+.lib-item{padding:12px;background:#fafbfd;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;cursor:pointer;transition:.15s}
+.lib-item:hover{background:#fff;border-color:var(--primary);box-shadow:var(--shadow)}
+.lib-item-title{font-size:13px;font-weight:600;margin-bottom:4px}
+.lib-item-meta{font-size:11px;color:var(--muted);margin-bottom:6px}
+.lib-item-learning{font-size:12px;color:var(--text);line-height:1.45}
+
+/* Toast */
+.toast{position:fixed;bottom:20px;right:20px;background:#0f1b2d;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:500;box-shadow:var(--shadow-lg);z-index:100;animation:slidein .2s}
+@keyframes slidein{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+.toast.error{background:var(--danger)}
+.toast.success{background:var(--success)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    Log de Ações <span>CRM</span>
+    <small>Backlog · Calendários · Aprendizados</small>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-ghost btn-sm" onclick="exportData()">Exportar</button>
+    <button class="btn" onclick="openPanel('create','action')">+ Nova Ação</button>
+    <button class="btn btn-warn" onclick="openPanel('create','test')">+ Novo Teste</button>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-tab="backlog">Backlog</button>
+  <button class="tab-btn" data-tab="campaigns">Calendário de Campanhas</button>
+  <button class="tab-btn" data-tab="library">Biblioteca</button>
+</nav>
+
+<main>
+
+<!-- ============ BACKLOG ============ -->
+<section class="page active" id="page-backlog">
+
+  <div class="sub-tabs">
+    <button class="sub-tab-btn active" data-sub="list">Lista (Ações + Testes)</button>
+    <button class="sub-tab-btn" data-sub="running">Em andamento</button>
+    <button class="sub-tab-btn" data-sub="done">Concluídos</button>
+    <button class="sub-tab-btn" data-sub="cal">Calendário de Testes</button>
+  </div>
+
+  <!-- Lista -->
+  <div class="sub-page active" id="sub-list">
+    <div class="grid grid-4">
+      <div class="card"><div class="card-title">Total no backlog</div><div class="kpi-value" id="kpi-total">—</div><div class="kpi-sub">Ações + testes</div></div>
+      <div class="card"><div class="card-title">Em execução</div><div class="kpi-value" id="kpi-running">—</div><div class="kpi-sub">Ativos agora</div></div>
+      <div class="card"><div class="card-title">Planejados</div><div class="kpi-value" id="kpi-planned">—</div><div class="kpi-sub">Ainda não iniciados</div></div>
+      <div class="card"><div class="card-title">Testes ativos</div><div class="kpi-value" id="kpi-tests">—</div><div class="kpi-sub">Aguardando finalizar</div></div>
+    </div>
+
+    <div class="toolbar" style="margin-top:18px">
+      <div class="search-row">
+        <select id="f-list-channel"><option value="all">Todos os canais</option></select>
+        <select id="f-list-type"><option value="all">Todos os tipos</option></select>
+        <select id="f-list-resp"><option value="all">Todos os responsáveis</option></select>
+        <select id="f-list-kind">
+          <option value="all">Ações + Testes</option>
+          <option value="action">Só Ações</option>
+          <option value="test">Só Testes</option>
+        </select>
+        <input type="search" id="f-list-search" placeholder="Buscar título, ativo, motivo...">
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="resetFilters('list')">Limpar</button>
+    </div>
+
+    <div class="table-wrap">
+      <table id="table-list">
+        <thead><tr>
+          <th>Título</th><th>Tipo</th><th>Canal</th><th>Fluxo/Campanha</th><th>Resp.</th><th>Data</th><th>Status</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div id="empty-list" class="empty-state" style="display:none;margin-top:14px"><h3>Nenhum registro encontrado</h3><p>Ajuste os filtros ou crie um novo registro.</p></div>
+  </div>
+
+  <!-- Em andamento -->
+  <div class="sub-page" id="sub-running">
+    <div class="toolbar">
+      <div class="search-row">
+        <select id="f-run-channel"><option value="all">Todos os canais</option></select>
+        <select id="f-run-kind">
+          <option value="all">Ações + Testes</option>
+          <option value="action">Só Ações</option>
+          <option value="test">Só Testes</option>
+        </select>
+        <input type="search" id="f-run-search" placeholder="Buscar...">
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="resetFilters('run')">Limpar</button>
+    </div>
+    <div class="grid grid-3" id="running-grid"></div>
+    <div id="empty-running" class="empty-state" style="display:none"><h3>Nenhum registro em andamento</h3><p>Crie uma nova ação ou teste para começar.</p></div>
+  </div>
+
+  <!-- Concluídos -->
+  <div class="sub-page" id="sub-done">
+    <div class="toolbar">
+      <div class="search-row">
+        <select id="f-done-channel"><option value="all">Todos os canais</option></select>
+        <select id="f-done-kind">
+          <option value="all">Ações + Testes</option>
+          <option value="action">Só Ações</option>
+          <option value="test">Só Testes</option>
+        </select>
+        <select id="f-done-result">
+          <option value="all">Todos os resultados</option>
+          <option value="positive">Positivo</option>
+          <option value="neutral">Neutro</option>
+          <option value="negative">Negativo</option>
+        </select>
+        <input type="search" id="f-done-search" placeholder="Buscar...">
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="resetFilters('done')">Limpar</button>
+    </div>
+    <div class="table-wrap">
+      <table id="table-done">
+        <thead><tr>
+          <th>Título</th><th>Tipo</th><th>Canal</th><th>Resp.</th><th>Data</th><th>Resultado</th><th>Aprendizado</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div id="empty-done" class="empty-state" style="display:none;margin-top:14px"><h3>Nenhum registro concluído</h3><p>Finalize testes ou marque ações como concluídas para vê-las aqui.</p></div>
+  </div>
+
+  <!-- Calendário de testes -->
+  <div class="sub-page" id="sub-cal">
+    <div id="cal-test-container"></div>
+  </div>
+
+</section>
+
+<!-- ============ CALENDÁRIO DE CAMPANHAS ============ -->
+<section class="page" id="page-campaigns">
+  <div class="sub-tabs">
+    <button class="sub-tab-btn active" data-sub="ec">E-mail Campanha</button>
+    <button class="sub-tab-btn" data-sub="wc">WhatsApp Campanha</button>
+  </div>
+  <div class="sub-page active" id="sub-ec"><div id="cal-ec-container"></div></div>
+  <div class="sub-page" id="sub-wc"><div id="cal-wc-container"></div></div>
+</section>
+
+<!-- ============ BIBLIOTECA ============ -->
+<section class="page" id="page-library">
+  <p style="color:var(--muted);margin-bottom:14px;font-size:13px">Testes finalizados com aprendizado registrado — segmentados por o que funcionou (replicar) e o que não repetir.</p>
+  <div class="lib-grid">
+    <div class="lib-col success">
+      <h3>✅ Funcionou — Replicar <span class="pill" id="lib-pos-count">0</span></h3>
+      <div id="lib-pos"></div>
+    </div>
+    <div class="lib-col fail">
+      <h3>❌ Não Repetir — Evitar <span class="pill" id="lib-neg-count">0</span></h3>
+      <div id="lib-neg"></div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- Side panel -->
+<div class="panel-overlay" id="overlay" onclick="closePanel()"></div>
+<aside class="side-panel" id="panel">
+  <div class="panel-head">
+    <h2 id="panel-title">—</h2>
+    <button class="panel-close" onclick="closePanel()">×</button>
+  </div>
+  <div class="panel-body" id="panel-body"></div>
+  <div class="panel-foot" id="panel-foot"></div>
+</aside>
+
+<script>
+// =========================================
+// CONSTANTES
+// =========================================
+const CHANNELS = {
+  ef:{name:'E-mail Fluxo', color:'#2563eb'},
+  ec:{name:'E-mail Campanha', color:'#8b5cf6'},
+  wf:{name:'WhatsApp Fluxo', color:'#10b981'},
+  wc:{name:'WhatsApp Campanha', color:'#ec4899'},
+  co:{name:'Comunidade WhatsApp', color:'#f59e0b'}
+};
+const TYPES = {
+  launch:{name:'Lançamento de fluxo/campanha', color:'#2563eb'},
+  copy:{name:'Mudança de copy/criativo', color:'#8b5cf6'},
+  ab:{name:'Teste A/B', color:'#ec4899'},
+  segment:{name:'Mudança de segmentação/público', color:'#10b981'},
+  cadence:{name:'Mudança de cadência/horário', color:'#f59e0b'},
+  trigger:{name:'Mudança de gatilho de fluxo', color:'#06b6d4'},
+  popup:{name:'Novo popup/formulário', color:'#a855f7'},
+  pause:{name:'Pausa/desativação', color:'#94a3b8'},
+  ops:{name:'Mudança operacional', color:'#64748b'},
+  offer:{name:'Teste de oferta', color:'#ef4444'},
+  base:{name:'Segmentação da base', color:'#14b8a6'}
+};
+const STATUS = {
+  planned:{name:'Planejado'},
+  running:{name:'Em execução'},
+  done:{name:'Concluído'},
+  paused:{name:'Pausado'},
+  cancelled:{name:'Cancelado'}
+};
+const RESULTS = {
+  positive:{name:'Positivo', color:'#10b981'},
+  neutral:{name:'Neutro', color:'#94a3b8'},
+  negative:{name:'Negativo', color:'#ef4444'}
+};
+const METRICS = ['Receita','Receita / Inscrito','Receita / Disparo','Taxa de Abertura','CTOR','Taxa de Resposta','Conversão Geral','RPS','Ticket Médio','Retenção da IA','Taxa de Cadastro','Outra'];
+
+// Campanhas
+const EMAIL_MODELS = {
+  visual:       {name:'Visual',       color:'#8b5cf6'},
+  transacional: {name:'Transacional', color:'#2563eb'},
+  desformatado: {name:'Desformatado', color:'#64748b'},
+  storytelling: {name:'Storytelling', color:'#ec4899'}
+};
+const EMAIL_BASES = ['Engajados 90d','VIP / Campeões','Base Geral','Compradores Recentes (30d)','Reativação 60d','Leads (não compraram)','Carrinho Abandonado','Cluster Premium'];
+const WPP_BASES = [
+  {name:'Clientes Quentes', kind:'hot',  color:'#ef4444'},
+  {name:'Clientes Mornos',  kind:'warm', color:'#f59e0b'},
+  {name:'Clientes Frios',   kind:'cold', color:'#06b6d4'},
+  {name:'Leads Quentes',    kind:'hot',  color:'#ec4899'},
+  {name:'Leads Mornos',     kind:'warm', color:'#fbbf24'},
+  {name:'Leads Frios',      kind:'cold', color:'#94a3b8'}
+];
+const WPP_TIMES = ['09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00'];
+function wppBaseColor(name){ return WPP_BASES.find(b=>b.name===name)?.color || '#94a3b8'; }
+function wppBaseKind(name){ return WPP_BASES.find(b=>b.name===name)?.kind || 'cold'; }
+
+// =========================================
+// STORAGE
+// =========================================
+const STORAGE_KEY = 'crm-log-v5';
+function loadData(){
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if(!raw){ const seed = seedData(); localStorage.setItem(STORAGE_KEY, JSON.stringify(seed)); return seed; }
+  try{ return JSON.parse(raw); }catch(e){ return []; }
+}
+function saveData(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+function uid(){ return 'i'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+
+function seedData(){
+  const t = new Date(); const Y = t.getFullYear(); const M = t.getMonth();
+  const d = (day)=>new Date(Y,M,day).toISOString().slice(0,10);
+  return [
+    {id:uid(), kind:'test', title:'A/B Subject: emoji vs sem emoji · Boas-vindas', type:'ab', channel:'ef', asset:'Boas-vindas', startDate:d(2), endDate:d(9), responsible:'Daniel', status:'done', motivation:'Suspeita de fadiga visual nas primeiras impressões', hypothesis:'Subject com emoji vai aumentar a Taxa de Abertura', targetMetric:'Taxa de Abertura', expectedImprovement:3, valueBefore:23.4, valueAfter:27.1, result:'positive', learning:'Emoji no início do subject performa melhor para audiência feminina. Replicar em Carrinho Abandonado.', attachment:'https://klaviyo.com/...', createdAt:new Date().toISOString()},
+    {id:uid(), kind:'action', title:'Mudança de gatilho do fluxo Carrinho Abandonado para 1h', type:'trigger', channel:'ef', asset:'Carrinho Abandonado', startDate:d(5), endDate:null, responsible:'Daniel', status:'done', motivation:'Carrinho ficava abandonado por 4h antes do primeiro toque, perdíamos a janela de decisão', hypothesis:null, targetMetric:null, expectedImprovement:null, valueBefore:null, valueAfter:null, result:null, learning:null, attachment:null, createdAt:new Date().toISOString()},
+    {id:uid(), kind:'test', title:'Oferta 15% OFF vs Frete Grátis · Reativação 60d', type:'offer', channel:'ef', asset:'Reativação 60d', startDate:d(8), endDate:d(22), responsible:'Maria', status:'running', motivation:'Validar qual incentivo recupera mais clientes frios', hypothesis:'Frete grátis converte mais que 15% OFF em ticket > R$300', targetMetric:'Conversão Geral', expectedImprovement:0.5, valueBefore:1.8, valueAfter:null, result:null, learning:null, attachment:null, createdAt:new Date().toISOString()},
+    {id:uid(), kind:'action', title:'Lançamento Campanha Drop Coleção SS25', type:'launch', channel:'ec', asset:'Drop SS25', startDate:d(10), endDate:null, responsible:'Maria', status:'running', motivation:'Anunciar coleção nova com exclusividade para base CRM', hypothesis:null, targetMetric:null, expectedImprovement:null, valueBefore:null, valueAfter:null, result:null, learning:null, attachment:'https://klaviyo.com/campaigns/123', createdAt:new Date().toISOString()},
+    {id:uid(), kind:'test', title:'Horário de disparo: 10h vs 19h · Newsletter Semanal', type:'cadence', channel:'ec', asset:'Newsletter Semanal', startDate:d(12), endDate:d(26), responsible:'Daniel', status:'running', motivation:'Definir melhor horário para newsletter (hoje sempre 10h)', hypothesis:'19h converte melhor para audiência mobile-first', targetMetric:'CTOR', expectedImprovement:2, valueBefore:12.5, valueAfter:null, result:null, learning:null, attachment:null, createdAt:new Date().toISOString()},
+    {id:uid(), kind:'test', title:'Copy curto vs longo · Flash Sale 24h', type:'copy', channel:'wc', asset:'Flash Sale 24h', startDate:d(6), endDate:d(13), responsible:'Maria', status:'done', motivation:'Hipótese de que mensagens longas têm menos engajamento no WhatsApp', hypothesis:'Copy ≤ 80 caracteres terá Taxa de Resposta maior', targetMetric:'Taxa de Resposta', expectedImprovement:4, valueBefore:9.1, valueAfter:6.8, result:'negative', learning:'Copy curto teve PIOR engajamento — talvez por falta de contexto da oferta. Não repetir.', attachment:null, createdAt:new Date().toISOString()},
+    {id:uid(), kind:'action', title:'Novo popup de boas-vindas com cupom 10% OFF', type:'popup', channel:'ef', asset:'Popup Home', startDate:d(15), endDate:null, responsible:'Maria', status:'running', motivation:'Aumentar captação de e-mails na home (taxa atual: 2,1%)', hypothesis:null, targetMetric:null, expectedImprovement:null, valueBefore:null, valueAfter:null, result:null, learning:null, attachment:null, createdAt:new Date().toISOString()},
+    {id:uid(), kind:'test', title:'Segmento VIP vs Geral · Cupom Aniversário', type:'segment', channel:'co', asset:'Cupom Aniversário', startDate:d(18), endDate:d(25), responsible:'Daniel', status:'planned', motivation:'Validar se segmento VIP responde melhor a cupons exclusivos', hypothesis:'VIP terá Receita/Disparo ≥ 3x maior que segmento geral', targetMetric:'Receita / Disparo', expectedImprovement:200, valueBefore:null, valueAfter:null, result:null, learning:null, attachment:null, createdAt:new Date().toISOString()},
+    {id:uid(), kind:'action', title:'Lançamento Drop SS25 · WhatsApp', type:'launch', channel:'wc', asset:'Drop SS25 WA', startDate:d(20), endDate:null, responsible:'Maria', status:'planned', motivation:'Replicar sucesso da pré-venda do e-mail no WhatsApp', hypothesis:null, targetMetric:null, expectedImprovement:null, valueBefore:null, valueAfter:null, result:null, learning:null, attachment:null, createdAt:new Date().toISOString()},
+    {id:uid(), kind:'test', title:'CTA "Compre agora" vs "Ver coleção"', type:'ab', channel:'ec', asset:'Newsletter Semanal', startDate:d(22), endDate:d(29), responsible:'Daniel', status:'planned', motivation:'Avaliar se CTA mais comercial gera mais cliques', hypothesis:'CTA "Compre agora" terá CTOR maior', targetMetric:'CTOR', expectedImprovement:1.5, valueBefore:null, valueAfter:null, result:null, learning:null, attachment:null, createdAt:new Date().toISOString()},
+    // Campanhas E-mail
+    {id:uid(), kind:'campaign-ec', name:'Drop Coleção SS25', date:d(10), bases:['Engajados 90d','VIP / Campeões','Base Geral'], schedule:'10:00', emailModel:'visual', createdAt:new Date().toISOString()},
+    {id:uid(), kind:'campaign-ec', name:'Newsletter Semanal #19', date:d(14), bases:['Base Geral','Engajados 90d'], schedule:'19:00', emailModel:'storytelling', createdAt:new Date().toISOString()},
+    {id:uid(), kind:'campaign-ec', name:'Cyber Monday Prévia', date:d(21), bases:['Engajados 90d','VIP / Campeões','Compradores Recentes (30d)'], schedule:'09:00', emailModel:'transacional', createdAt:new Date().toISOString()},
+    {id:uid(), kind:'campaign-ec', name:'Carrinho Abandonado · Reset semanal', date:d(7), bases:['Carrinho Abandonado'], schedule:'15:00', emailModel:'desformatado', createdAt:new Date().toISOString()},
+    // Campanhas WhatsApp
+    {id:uid(), kind:'campaign-wc', name:'Flash Sale 24h', date:d(12), bases:['Clientes Quentes','Clientes Mornos'], quantity:8500, schedule:['10:00','14:00','19:00'], createdAt:new Date().toISOString()},
+    {id:uid(), kind:'campaign-wc', name:'Cupom Exclusivo Frios', date:d(18), bases:['Clientes Frios','Leads Frios'], quantity:12000, schedule:['11:00','15:00'], createdAt:new Date().toISOString()},
+    {id:uid(), kind:'campaign-wc', name:'Drop SS25 · WhatsApp', date:d(20), bases:['Clientes Quentes','Leads Quentes'], quantity:5200, schedule:['09:00','12:00','17:00','20:00'], createdAt:new Date().toISOString()}
+  ];
+}
+let data = loadData();
+
+// =========================================
+// HELPERS
+// =========================================
+function fmtDate(iso){ if(!iso) return '—'; return new Date(iso+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'}); }
+function fmtDateFull(iso){ if(!iso) return '—'; return new Date(iso+'T00:00:00').toLocaleDateString('pt-BR'); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+
+function populateChannelSel(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.innerHTML = '<option value="all">Todos os canais</option>'+Object.entries(CHANNELS).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join('');
+}
+function populateTypeSel(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.innerHTML = '<option value="all">Todos os tipos</option>'+Object.entries(TYPES).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join('');
+}
+function populateRespSel(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const resps = [...new Set(data.map(d=>d.responsible).filter(Boolean))];
+  el.innerHTML = '<option value="all">Todos os responsáveis</option>'+resps.map(r=>`<option value="${r}">${r}</option>`).join('');
+}
+
+// =========================================
+// LISTA (Backlog principal)
+// =========================================
+function applyListFilters(item){
+  if(item.kind && item.kind.startsWith('campaign-')) return false;
+  const f = {
+    channel: document.getElementById('f-list-channel').value,
+    type:    document.getElementById('f-list-type').value,
+    resp:    document.getElementById('f-list-resp').value,
+    kind:    document.getElementById('f-list-kind').value,
+    search:  document.getElementById('f-list-search').value.toLowerCase().trim()
+  };
+  if(f.channel!=='all' && item.channel!==f.channel) return false;
+  if(f.type!=='all' && item.type!==f.type) return false;
+  if(f.resp!=='all' && item.responsible!==f.resp) return false;
+  if(f.kind!=='all' && item.kind!==f.kind) return false;
+  if(f.search){
+    const hay = (item.title+' '+item.asset+' '+(item.motivation||'')+' '+(item.hypothesis||'')).toLowerCase();
+    if(!hay.includes(f.search)) return false;
+  }
+  return true;
+}
+function renderKPIs(){
+  const backlog = data.filter(d=>!(d.kind && d.kind.startsWith('campaign-')));
+  document.getElementById('kpi-total').textContent = backlog.length;
+  document.getElementById('kpi-running').textContent = backlog.filter(d=>d.status==='running').length;
+  document.getElementById('kpi-planned').textContent = backlog.filter(d=>d.status==='planned').length;
+  document.getElementById('kpi-tests').textContent = backlog.filter(d=>d.kind==='test' && d.status==='running').length;
+}
+function renderList(){
+  const list = data.filter(applyListFilters).sort((a,b)=>b.startDate.localeCompare(a.startDate));
+  const tbody = document.querySelector('#table-list tbody');
+  const empty = document.getElementById('empty-list');
+  if(list.length===0){ tbody.innerHTML=''; empty.style.display='block'; document.getElementById('table-list').parentElement.style.display='none'; return; }
+  empty.style.display='none';
+  document.getElementById('table-list').parentElement.style.display='block';
+  tbody.innerHTML = list.map(item=>`
+    <tr onclick="openPanel('detail','${item.kind}','${item.id}')">
+      <td class="title-cell">
+        <span class="kind-badge ${item.kind==='test'?'kb-test':'kb-action'}">${item.kind==='test'?'Teste':'Ação'}</span>
+        ${item.title}
+      </td>
+      <td><span class="tag-type-dot" style="background:${TYPES[item.type]?.color||'#94a3b8'}"></span>${TYPES[item.type]?.name||item.type}</td>
+      <td>${CHANNELS[item.channel]?.name||'—'}</td>
+      <td>${item.asset||'—'}</td>
+      <td>${item.responsible||'—'}</td>
+      <td>${fmtDate(item.startDate)}${item.endDate?' → '+fmtDate(item.endDate):''}</td>
+      <td><span class="tag tag-status-${item.status}">${STATUS[item.status]?.name||item.status}</span></td>
+    </tr>
+  `).join('');
+}
+
+// =========================================
+// EM ANDAMENTO (cards com botão Finalizar)
+// =========================================
+function applyRunFilters(item){
+  if(item.kind && item.kind.startsWith('campaign-')) return false;
+  if(item.status!=='running') return false;
+  const f = {
+    channel: document.getElementById('f-run-channel').value,
+    kind:    document.getElementById('f-run-kind').value,
+    search:  document.getElementById('f-run-search').value.toLowerCase().trim()
+  };
+  if(f.channel!=='all' && item.channel!==f.channel) return false;
+  if(f.kind!=='all' && item.kind!==f.kind) return false;
+  if(f.search){
+    const hay = (item.title+' '+item.asset+' '+(item.motivation||'')+' '+(item.hypothesis||'')).toLowerCase();
+    if(!hay.includes(f.search)) return false;
+  }
+  return true;
+}
+function renderRunning(){
+  const list = data.filter(applyRunFilters).sort((a,b)=>a.startDate.localeCompare(b.startDate));
+  const grid = document.getElementById('running-grid');
+  const empty = document.getElementById('empty-running');
+  if(list.length===0){ grid.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  grid.innerHTML = list.map(item=>{
+    const isTest = item.kind==='test';
+    return `<div class="test-card">
+      <div class="test-card-head">
+        <h4><span class="kind-badge ${isTest?'kb-test':'kb-action'}">${isTest?'Teste':'Ação'}</span> ${item.title}</h4>
+      </div>
+      <div class="test-card-meta">${CHANNELS[item.channel]?.name} · ${item.asset||'—'} · ${item.responsible}</div>
+      ${isTest?`
+        <div class="test-card-info">
+          <div><div class="lbl">Métrica-alvo</div><div class="val">${item.targetMetric||'—'}</div></div>
+          <div><div class="lbl">Meta de melhoria</div><div class="val">+${item.expectedImprovement||'—'}</div></div>
+          <div><div class="lbl">Início</div><div class="val">${fmtDate(item.startDate)}</div></div>
+          <div><div class="lbl">Previsto fim</div><div class="val">${fmtDate(item.endDate)}</div></div>
+        </div>`:`
+        <div class="test-card-info">
+          <div><div class="lbl">Tipo</div><div class="val">${TYPES[item.type]?.name||'—'}</div></div>
+          <div><div class="lbl">Data</div><div class="val">${fmtDate(item.startDate)}</div></div>
+        </div>`}
+      <div class="test-card-actions">
+        <button class="btn btn-ghost btn-sm" onclick="openPanel('detail','${item.kind}','${item.id}')">Ver detalhes</button>
+        ${isTest?`<button class="btn btn-success btn-sm" onclick="openFinishPanel('${item.id}')">Finalizar teste</button>`
+                :`<button class="btn btn-sm" onclick="markActionDone('${item.id}')">Marcar concluído</button>`}
+      </div>
+    </div>`;
+  }).join('');
+}
+function markActionDone(id){
+  const item = data.find(d=>d.id===id);
+  if(!item) return;
+  item.status = 'done';
+  saveData(); renderAll(); toast('Ação marcada como concluída','success');
+}
+
+// =========================================
+// CONCLUÍDOS
+// =========================================
+function applyDoneFilters(item){
+  if(item.kind && item.kind.startsWith('campaign-')) return false;
+  if(item.status!=='done' && item.status!=='cancelled') return false;
+  const f = {
+    channel: document.getElementById('f-done-channel').value,
+    kind:    document.getElementById('f-done-kind').value,
+    result:  document.getElementById('f-done-result').value,
+    search:  document.getElementById('f-done-search').value.toLowerCase().trim()
+  };
+  if(f.channel!=='all' && item.channel!==f.channel) return false;
+  if(f.kind!=='all' && item.kind!==f.kind) return false;
+  if(f.result!=='all' && item.result!==f.result) return false;
+  if(f.search){
+    const hay = (item.title+' '+item.asset+' '+(item.learning||'')).toLowerCase();
+    if(!hay.includes(f.search)) return false;
+  }
+  return true;
+}
+function renderDone(){
+  const list = data.filter(applyDoneFilters).sort((a,b)=>b.startDate.localeCompare(a.startDate));
+  const tbody = document.querySelector('#table-done tbody');
+  const empty = document.getElementById('empty-done');
+  if(list.length===0){ tbody.innerHTML=''; empty.style.display='block'; document.getElementById('table-done').parentElement.style.display='none'; return; }
+  empty.style.display='none';
+  document.getElementById('table-done').parentElement.style.display='block';
+  tbody.innerHTML = list.map(item=>`
+    <tr onclick="openPanel('detail','${item.kind}','${item.id}')">
+      <td class="title-cell">
+        <span class="kind-badge ${item.kind==='test'?'kb-test':'kb-action'}">${item.kind==='test'?'Teste':'Ação'}</span>
+        ${item.title}
+      </td>
+      <td><span class="tag-type-dot" style="background:${TYPES[item.type]?.color||'#94a3b8'}"></span>${TYPES[item.type]?.name||'—'}</td>
+      <td>${CHANNELS[item.channel]?.name||'—'}</td>
+      <td>${item.responsible||'—'}</td>
+      <td>${fmtDate(item.startDate)}</td>
+      <td>${item.result?`<span class="tag tag-result-${item.result}">${RESULTS[item.result].name}</span>`:'<span style="color:var(--muted)">—</span>'}</td>
+      <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--muted)">${item.learning||'—'}</td>
+    </tr>
+  `).join('');
+}
+
+// =========================================
+// CALENDÁRIOS
+// =========================================
+const calState = {
+  'cal-test':{date:new Date(), color:'type', filter:{kindOnly:'test'}, title:'Planejamento de Testes', mount:'cal-test-container', isCampaign:false},
+  'cal-ec':  {date:new Date(), color:'model', filter:{kindOnly:'campaign-ec'}, title:'E-mail Campanha', mount:'cal-ec-container', isCampaign:true, campaignKind:'campaign-ec'},
+  'cal-wc':  {date:new Date(), color:'base',  filter:{kindOnly:'campaign-wc'}, title:'WhatsApp Campanha', mount:'cal-wc-container', isCampaign:true, campaignKind:'campaign-wc'}
+};
+
+function renderCalendar(key){
+  const st = calState[key];
+  const mount = document.getElementById(st.mount);
+  mount.innerHTML = `
+    <div class="calendar-wrap">
+      <div class="calendar-header">
+        <div class="cal-nav">
+          <button onclick="moveMonth('${key}',-1)">‹</button>
+          <div class="cal-month" id="month-${key}">—</div>
+          <button onclick="moveMonth('${key}',1)">›</button>
+          <button class="btn btn-ghost btn-sm" onclick="goToday('${key}')" style="margin-left:8px">Hoje</button>
+        </div>
+        ${st.isCampaign?`<div style="font-size:11px;color:var(--muted)">Cor por: ${st.campaignKind==='campaign-ec'?'Modelo do e-mail':'Tipo de base'}</div>`:`<div class="cal-color-toggle">
+          <span>Cor por:</span>
+          <button class="${st.color==='type'?'active':''}" onclick="setColor('${key}','type')">Tipo</button>
+          <button class="${st.color==='status'?'active':''}" onclick="setColor('${key}','status')">Status</button>
+          <button class="${st.color==='result'?'active':''}" onclick="setColor('${key}','result')">Resultado</button>
+        </div>`}
+      </div>
+      <div class="legend" id="legend-${key}"></div>
+      <div class="cal-grid" id="grid-${key}"></div>
+    </div>`;
+  drawCalendar(key);
+}
+function moveMonth(k,delta){ calState[k].date = new Date(calState[k].date.getFullYear(), calState[k].date.getMonth()+delta, 1); drawCalendar(k); }
+function goToday(k){ calState[k].date = new Date(); drawCalendar(k); }
+function setColor(k,mode){ calState[k].color = mode; renderCalendar(k); }
+
+function eventColor(item, mode){
+  if(mode==='status'){
+    const map = {planned:'#94a3b8',running:'#2563eb',done:'#10b981',paused:'#f59e0b',cancelled:'#ef4444'};
+    return map[item.status]||'#94a3b8';
+  }
+  if(mode==='result'){
+    if(!item.result) return '#94a3b8';
+    return RESULTS[item.result].color;
+  }
+  return TYPES[item.type]?.color||'#94a3b8';
+}
+
+function drawCalendar(key){
+  const st = calState[key];
+  const Y = st.date.getFullYear(); const M = st.date.getMonth();
+  document.getElementById('month-'+key).textContent = st.date.toLocaleDateString('pt-BR',{month:'long',year:'numeric'}).replace(/^./,c=>c.toUpperCase());
+
+  const startDow = new Date(Y,M,1).getDay();
+  const daysInMonth = new Date(Y,M+1,0).getDate();
+  const prevDays = new Date(Y,M,0).getDate();
+  const cells = [];
+  for(let i=0;i<startDow;i++){
+    const day = prevDays - startDow + i + 1;
+    cells.push({day, date:new Date(Y,M-1,day).toISOString().slice(0,10), otherMonth:true});
+  }
+  for(let day=1;day<=daysInMonth;day++) cells.push({day, date:new Date(Y,M,day).toISOString().slice(0,10), otherMonth:false});
+  while(cells.length%7!==0){
+    const last = cells[cells.length-1];
+    const lastDate = new Date(last.date+'T00:00:00'); lastDate.setDate(lastDate.getDate()+1);
+    cells.push({day:lastDate.getDate(), date:lastDate.toISOString().slice(0,10), otherMonth:true});
+  }
+  const grid = document.getElementById('grid-'+key);
+  grid.innerHTML = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d=>`<div class="cal-dow">${d}</div>`).join('');
+  const events = data.filter(d=>{
+    if(st.filter.kindOnly){
+      if(d.kind!==st.filter.kindOnly) return false;
+    } else if(st.filter.channel){
+      if(d.channel!==st.filter.channel) return false;
+    }
+    return true;
+  });
+  const today = todayISO();
+  cells.forEach(c=>{
+    const dayEvents = events.filter(e=>{
+      if(st.isCampaign){
+        return e.date === c.date;
+      }
+      const s = e.startDate; const f = e.endDate || e.startDate;
+      return c.date >= s && c.date <= f;
+    });
+    const div = document.createElement('div');
+    div.className = 'cal-day'+(c.otherMonth?' other-month':'')+(c.date===today?' today':'');
+    if(!st.isCampaign){
+      div.addEventListener('dragover', e=>{ e.preventDefault(); div.classList.add('drag-over'); });
+      div.addEventListener('dragleave', ()=>div.classList.remove('drag-over'));
+      div.addEventListener('drop', e=>{
+        e.preventDefault(); div.classList.remove('drag-over');
+        const id = e.dataTransfer.getData('text/id'); moveEvent(id, c.date);
+      });
+    }
+    div.innerHTML = `<span class="cal-day-num">${c.day}</span>`;
+
+    // Botão + para criar campanha no dia (só calendários de campanha)
+    if(st.isCampaign && !c.otherMonth){
+      const addBtn = document.createElement('button');
+      addBtn.className = 'cal-add-btn';
+      addBtn.textContent = '+';
+      addBtn.title = 'Nova campanha neste dia';
+      addBtn.onclick = (e)=>{ e.stopPropagation(); openCampaignPanel('create', st.campaignKind, null, c.date); };
+      div.appendChild(addBtn);
+    }
+
+    dayEvents.forEach(ev=>{
+      let color, label, classes='cal-event';
+      if(ev.kind==='campaign-ec'){
+        color = EMAIL_MODELS[ev.emailModel]?.color || '#2563eb';
+        label = `📧 ${ev.schedule||''} · ${ev.name}`;
+        classes += ' campaign';
+      } else if(ev.kind==='campaign-wc'){
+        color = wppBaseColor(ev.bases?.[0]);
+        const times = Array.isArray(ev.schedule) ? ev.schedule.length+'x' : '';
+        label = `💬 ${times?times+' · ':''}${ev.name}`;
+        classes += ' campaign';
+      } else {
+        color = eventColor(ev, st.color);
+        label = `${ev.kind==='test'?'🧪 ':''}${ev.title}`;
+      }
+      const evDiv = document.createElement('div');
+      evDiv.className = classes;
+      evDiv.style.background = color;
+      evDiv.draggable = !st.isCampaign;
+      evDiv.title = ev.name || ev.title;
+      evDiv.innerHTML = `<span class="cal-event-dot"></span>${label}`;
+      evDiv.onclick = (e)=>{
+        e.stopPropagation();
+        if(ev.kind && ev.kind.startsWith('campaign-')) openCampaignPanel('detail', ev.kind, ev.id);
+        else openPanel('detail', ev.kind, ev.id);
+      };
+      if(!st.isCampaign) evDiv.ondragstart = (e)=>{ e.dataTransfer.setData('text/id', ev.id); };
+      div.appendChild(evDiv);
+    });
+    grid.appendChild(div);
+  });
+
+  // Legenda
+  let legendItems;
+  if(st.isCampaign && st.campaignKind==='campaign-ec'){
+    legendItems = Object.entries(EMAIL_MODELS).map(([k,v])=>({name:v.name, color:v.color}));
+  } else if(st.isCampaign && st.campaignKind==='campaign-wc'){
+    legendItems = WPP_BASES.map(b=>({name:b.name, color:b.color}));
+  } else if(st.color==='type'){
+    legendItems = Object.entries(TYPES).map(([k,v])=>({name:v.name, color:v.color}));
+  } else if(st.color==='status'){
+    legendItems = [['planned','#94a3b8'],['running','#2563eb'],['done','#10b981'],['paused','#f59e0b'],['cancelled','#ef4444']].map(([k,c])=>({name:STATUS[k].name, color:c}));
+  } else {
+    legendItems = [...Object.entries(RESULTS).map(([k,v])=>({name:v.name, color:v.color})), {name:'Sem resultado', color:'#94a3b8'}];
+  }
+  document.getElementById('legend-'+key).innerHTML = legendItems.map(l=>`<span class="legend-item"><span class="legend-dot" style="background:${l.color}"></span>${l.name}</span>`).join('');
+}
+function moveEvent(id, newDate){
+  const item = data.find(d=>d.id===id); if(!item) return;
+  const diff = (new Date(newDate+'T00:00:00') - new Date(item.startDate+'T00:00:00'))/86400000;
+  item.startDate = newDate;
+  if(item.endDate){
+    const end = new Date(item.endDate+'T00:00:00'); end.setDate(end.getDate()+diff);
+    item.endDate = end.toISOString().slice(0,10);
+  }
+  saveData(); renderAll(); toast('Evento movido');
+}
+
+// =========================================
+// BIBLIOTECA
+// =========================================
+function renderLibrary(){
+  const list = data.filter(d=>d.kind==='test' && d.status==='done' && d.result && d.learning);
+  const pos = list.filter(d=>d.result==='positive');
+  const neg = list.filter(d=>d.result==='negative');
+  document.getElementById('lib-pos-count').textContent = pos.length;
+  document.getElementById('lib-neg-count').textContent = neg.length;
+  const card = (it)=>`<div class="lib-item" onclick="openPanel('detail','${it.kind}','${it.id}')">
+    <div class="lib-item-title">${it.title}</div>
+    <div class="lib-item-meta">${CHANNELS[it.channel]?.name} · ${TYPES[it.type]?.name} · ${fmtDateFull(it.startDate)}</div>
+    <div class="lib-item-learning">${it.learning}</div>
+  </div>`;
+  document.getElementById('lib-pos').innerHTML = pos.length>0 ? pos.map(card).join('') : '<div class="empty-state" style="padding:20px;border:none"><p>Sem testes positivos ainda.</p></div>';
+  document.getElementById('lib-neg').innerHTML = neg.length>0 ? neg.map(card).join('') : '<div class="empty-state" style="padding:20px;border:none"><p>Sem testes negativos ainda.</p></div>';
+}
+
+// =========================================
+// PAINEL — CREATE / EDIT / DETAIL / FINISH
+// =========================================
+let panelState = {mode:null, kind:null, id:null};
+function openPanel(mode, kind, id){
+  panelState = {mode, kind, id};
+  document.getElementById('panel').classList.add('open');
+  document.getElementById('overlay').classList.add('open');
+  if(mode==='create' || mode==='edit') renderForm();
+  else renderDetail();
+}
+function openFinishPanel(id){
+  panelState = {mode:'finish', kind:'test', id};
+  document.getElementById('panel').classList.add('open');
+  document.getElementById('overlay').classList.add('open');
+  renderFinishForm();
+}
+function closePanel(){
+  document.getElementById('panel').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
+  panelState = {mode:null, kind:null, id:null};
+}
+
+function renderForm(){
+  const isTest = panelState.kind==='test';
+  const existing = panelState.id ? data.find(d=>d.id===panelState.id) : null;
+  document.getElementById('panel-title').innerHTML = `<span class="kind-badge ${isTest?'kb-test':'kb-action'}">${isTest?'Teste':'Ação'}</span> ${panelState.mode==='edit'?'Editar':'Novo'}`;
+  const it = existing || {};
+  document.getElementById('panel-body').innerHTML = `
+    <div class="form-row">
+      <label>Título <span class="required">*</span></label>
+      <input type="text" id="ff-title" value="${it.title||''}" placeholder="${isTest?'Ex.: A/B Subject com emoji · Boas-vindas':'Ex.: Lançamento Drop SS25'}">
+    </div>
+    <div class="form-row-2">
+      <div class="form-row">
+        <label>Tipo <span class="required">*</span></label>
+        <select id="ff-type">${Object.entries(TYPES).map(([k,v])=>`<option value="${k}" ${it.type===k?'selected':''}>${v.name}</option>`).join('')}</select>
+      </div>
+      <div class="form-row">
+        <label>Canal <span class="required">*</span></label>
+        <select id="ff-channel">${Object.entries(CHANNELS).map(([k,v])=>`<option value="${k}" ${it.channel===k?'selected':''}>${v.name}</option>`).join('')}</select>
+      </div>
+    </div>
+    <div class="form-row">
+      <label>Nome do Fluxo ou Campanha</label>
+      <input type="text" id="ff-asset" value="${it.asset||''}" placeholder="Ex.: Boas-vindas, Drop SS25, Newsletter Semanal">
+    </div>
+    <div class="form-row-2">
+      <div class="form-row">
+        <label>Responsável <span class="required">*</span></label>
+        <input type="text" id="ff-resp" value="${it.responsible||''}" placeholder="Nome">
+      </div>
+      <div class="form-row">
+        <label>Data de execução <span class="required">*</span></label>
+        <input type="date" id="ff-start" value="${it.startDate||todayISO()}">
+      </div>
+    </div>
+    ${isTest?`
+      <div class="form-row">
+        <label>Data prevista de fim <span class="required">*</span></label>
+        <input type="date" id="ff-end" value="${it.endDate||''}">
+      </div>`:''}
+    <div class="form-row">
+      <label>Motivo da ${isTest?'teste':'ação'} <span class="required">*</span></label>
+      <textarea id="ff-motivation" placeholder="Por que esta ${isTest?'teste':'ação'} está sendo feita?">${it.motivation||''}</textarea>
+    </div>
+    ${isTest?`
+    <div class="form-section">
+      <div class="form-section-title">🧪 Hipótese e Métrica do Teste</div>
+      <div class="form-row">
+        <label>Hipótese do teste <span class="required">*</span></label>
+        <textarea id="ff-hypothesis" placeholder="Ex.: Subject com emoji vai aumentar Taxa de Abertura">${it.hypothesis||''}</textarea>
+      </div>
+      <div class="form-row-2">
+        <div class="form-row">
+          <label>Métrica-alvo <span class="required">*</span></label>
+          <select id="ff-metric">
+            <option value="">Selecione…</option>
+            ${METRICS.map(m=>`<option value="${m}" ${it.targetMetric===m?'selected':''}>${m}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-row">
+          <label>Quanto pretende aumentar <span class="required">*</span></label>
+          <input type="number" step="0.1" id="ff-expected" value="${it.expectedImprovement??''}" placeholder="Ex.: 3">
+        </div>
+      </div>
+    </div>`:''}
+    <div class="form-row">
+      <label>Status</label>
+      <select id="ff-status">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}" ${it.status===k?'selected':(panelState.mode==='create'&&k==='planned')?'selected':''}>${v.name}</option>`).join('')}</select>
+    </div>
+    <div class="form-row">
+      <label>Anexo (link)</label>
+      <input type="url" id="ff-attachment" value="${it.attachment||''}" placeholder="https://klaviyo.com/...">
+    </div>
+  `;
+  const isEdit = panelState.mode==='edit';
+  document.getElementById('panel-foot').innerHTML = `
+    ${isEdit?`<button class="btn btn-danger btn-sm" onclick="deleteItem('${panelState.id}')">Excluir</button>`:''}
+    <div style="flex:1"></div>
+    <button class="btn btn-ghost btn-sm" onclick="closePanel()">Cancelar</button>
+    <button class="btn" onclick="saveForm()">Salvar</button>
+  `;
+}
+
+function saveForm(){
+  const isTest = panelState.kind==='test';
+  const v = id=>document.getElementById(id).value;
+  const title=v('ff-title').trim(), type=v('ff-type'), channel=v('ff-channel'), asset=v('ff-asset').trim(),
+        responsible=v('ff-resp').trim(), startDate=v('ff-start'), status=v('ff-status'),
+        motivation=v('ff-motivation').trim(), attachment=v('ff-attachment').trim();
+  if(!title) return toast('Título é obrigatório','error');
+  if(!responsible) return toast('Responsável é obrigatório','error');
+  if(!startDate) return toast('Data de execução é obrigatória','error');
+  if(!motivation) return toast('Motivo é obrigatório','error');
+  const payload = {kind:isTest?'test':'action', title, type, channel, asset, responsible, startDate, status, motivation, attachment:attachment||null};
+  if(isTest){
+    const endDate=v('ff-end'), hypothesis=v('ff-hypothesis').trim(), targetMetric=v('ff-metric'), expectedImprovement=v('ff-expected');
+    if(!endDate) return toast('Data prevista de fim é obrigatória','error');
+    if(endDate < startDate) return toast('Data de fim deve ser após início','error');
+    if(!hypothesis) return toast('Hipótese é obrigatória','error');
+    if(!targetMetric) return toast('Métrica-alvo é obrigatória','error');
+    if(!expectedImprovement) return toast('Indique quanto pretende aumentar','error');
+    payload.endDate=endDate; payload.hypothesis=hypothesis; payload.targetMetric=targetMetric; payload.expectedImprovement=parseFloat(expectedImprovement);
+  } else {
+    payload.endDate=null; payload.hypothesis=null; payload.targetMetric=null; payload.expectedImprovement=null;
+  }
+  if(panelState.mode==='edit'){
+    const idx = data.findIndex(d=>d.id===panelState.id);
+    data[idx] = {...data[idx], ...payload};
+    toast('Registro atualizado','success');
+  } else {
+    data.push({id:uid(), ...payload, valueBefore:null, valueAfter:null, result:null, learning:null, createdAt:new Date().toISOString()});
+    toast('Registro criado','success');
+  }
+  saveData(); populateRespSel('f-list-resp'); closePanel(); renderAll();
+}
+
+function deleteItem(id){
+  if(!confirm('Tem certeza que deseja excluir este registro?')) return;
+  data = data.filter(d=>d.id!==id);
+  saveData(); toast('Registro excluído','success'); closePanel(); renderAll();
+}
+
+// Finalizar Teste
+function renderFinishForm(){
+  const it = data.find(d=>d.id===panelState.id); if(!it) return;
+  document.getElementById('panel-title').innerHTML = `<span class="kind-badge kb-test">Teste</span> Finalizar`;
+  document.getElementById('panel-body').innerHTML = `
+    <h3 style="font-size:16px;font-weight:700;margin-bottom:12px">${it.title}</h3>
+    <div class="detail-meta">
+      <div class="detail-meta-item"><div class="lbl">Métrica-alvo</div><div class="val">${it.targetMetric||'—'}</div></div>
+      <div class="detail-meta-item"><div class="lbl">Meta de melhoria</div><div class="val">+${it.expectedImprovement||'—'}</div></div>
+      <div class="detail-meta-item"><div class="lbl">Hipótese</div><div class="val" style="font-size:12px;color:var(--muted)">${it.hypothesis||'—'}</div></div>
+      <div class="detail-meta-item"><div class="lbl">Período</div><div class="val">${fmtDate(it.startDate)} → ${fmtDate(it.endDate)}</div></div>
+    </div>
+    <div class="form-section finish">
+      <div class="form-section-title">📊 Resultado do teste</div>
+      <div class="form-row-2">
+        <div class="form-row">
+          <label>Valor antes (baseline) <span class="required">*</span></label>
+          <input type="number" step="0.01" id="ff-before" value="${it.valueBefore??''}" placeholder="Ex.: 23.4">
+        </div>
+        <div class="form-row">
+          <label>Valor depois <span class="required">*</span></label>
+          <input type="number" step="0.01" id="ff-after" value="${it.valueAfter??''}" placeholder="Ex.: 27.1">
+        </div>
+      </div>
+      <div id="finish-preview" style="font-size:12px;color:var(--muted);padding:8px 12px;background:#fff;border-radius:6px;margin-bottom:10px">Preencha os valores para ver o cálculo</div>
+      <div class="form-row">
+        <label>Aprendizado / Conclusão <span class="required">*</span></label>
+        <textarea id="ff-learning" placeholder="O que aprendemos? Devemos replicar ou evitar?">${it.learning||''}</textarea>
+      </div>
+    </div>
+  `;
+  document.getElementById('panel-foot').innerHTML = `
+    <div style="flex:1"></div>
+    <button class="btn btn-ghost btn-sm" onclick="closePanel()">Cancelar</button>
+    <button class="btn btn-success" onclick="saveFinish('${it.id}')">Finalizar teste</button>
+  `;
+  const update = ()=>{
+    const before = parseFloat(document.getElementById('ff-before').value);
+    const after = parseFloat(document.getElementById('ff-after').value);
+    if(isNaN(before)||isNaN(after)){
+      document.getElementById('finish-preview').textContent = 'Preencha os valores para ver o cálculo';
+      return;
+    }
+    const delta = after - before;
+    const target = it.expectedImprovement;
+    let result, label, color;
+    if(delta >= target){ result='positive'; label='✅ POSITIVO — atingiu a meta de melhoria'; color='#10b981'; }
+    else if(delta > 0){ result='neutral'; label='≈ NEUTRO — melhorou mas não atingiu a meta'; color='#94a3b8'; }
+    else { result='negative'; label='❌ NEGATIVO — não houve melhora ou piorou'; color='#ef4444'; }
+    document.getElementById('finish-preview').innerHTML =
+      `<div style="display:flex;justify-content:space-between;align-items:center">
+        <div><strong style="color:${color}">${label}</strong><br><span style="font-size:11px">Variação: ${delta>=0?'+':''}${delta.toFixed(2)} (meta era +${target})</span></div>
+      </div>`;
+  };
+  document.getElementById('ff-before').addEventListener('input', update);
+  document.getElementById('ff-after').addEventListener('input', update);
+  update();
+}
+function saveFinish(id){
+  const it = data.find(d=>d.id===id); if(!it) return;
+  const before = parseFloat(document.getElementById('ff-before').value);
+  const after = parseFloat(document.getElementById('ff-after').value);
+  const learning = document.getElementById('ff-learning').value.trim();
+  if(isNaN(before)) return toast('Valor antes é obrigatório','error');
+  if(isNaN(after)) return toast('Valor depois é obrigatório','error');
+  if(!learning) return toast('Aprendizado é obrigatório','error');
+  const delta = after - before;
+  const target = it.expectedImprovement;
+  let result;
+  if(delta >= target) result='positive';
+  else if(delta > 0) result='neutral';
+  else result='negative';
+  it.valueBefore = before; it.valueAfter = after; it.learning = learning; it.result = result; it.status = 'done';
+  saveData(); closePanel(); renderAll(); toast('Teste finalizado · '+(result==='positive'?'Positivo':result==='neutral'?'Neutro':'Negativo'),'success');
+}
+
+// Detalhe
+function renderDetail(){
+  const it = data.find(d=>d.id===panelState.id); if(!it){ closePanel(); return; }
+  document.getElementById('panel-title').innerHTML = `<span class="kind-badge ${it.kind==='test'?'kb-test':'kb-action'}">${it.kind==='test'?'Teste':'Ação'}</span> Detalhes`;
+  let impactHtml = '';
+  if(it.result){
+    const icon = it.result==='positive'?'↑':it.result==='negative'?'↓':'≈';
+    const txt = it.result==='positive'?'Movimentou pra MELHOR':it.result==='negative'?'Movimentou pra PIOR':'Sem mudança significativa';
+    let delta = '';
+    if(it.valueBefore!=null && it.valueAfter!=null){
+      const d = it.valueAfter - it.valueBefore;
+      delta = `<div class="delta-row"><span>${it.targetMetric||'Antes → Depois'}</span><strong>${it.valueBefore} → ${it.valueAfter} <span style="color:${d>=0?'var(--success)':'var(--danger)'}">(${d>=0?'+':''}${d.toFixed(2)})</span></strong></div>`;
+    }
+    impactHtml = `<div class="impact-card ${it.result}"><div class="impact-icon">${icon}</div><div class="impact-text"><strong>${txt}</strong><span>${it.targetMetric?'Métrica: '+it.targetMetric:''}</span></div></div>${delta}`;
+  } else if(it.kind==='test' && it.status==='running'){
+    impactHtml = `<div class="impact-card neutral"><div class="impact-icon">⏳</div><div class="impact-text"><strong>Em execução</strong><span>Finalize o teste para registrar o resultado</span></div></div>`;
+  }
+  document.getElementById('panel-body').innerHTML = `
+    <h3 style="font-size:17px;font-weight:700;margin-bottom:10px">${it.title}</h3>
+    <div class="detail-meta">
+      <div class="detail-meta-item"><div class="lbl">Tipo</div><div class="val"><span class="tag-type-dot" style="background:${TYPES[it.type]?.color}"></span>${TYPES[it.type]?.name||'—'}</div></div>
+      <div class="detail-meta-item"><div class="lbl">Canal</div><div class="val">${CHANNELS[it.channel]?.name||'—'}</div></div>
+      <div class="detail-meta-item"><div class="lbl">Fluxo/Campanha</div><div class="val">${it.asset||'—'}</div></div>
+      <div class="detail-meta-item"><div class="lbl">Responsável</div><div class="val">${it.responsible||'—'}</div></div>
+      <div class="detail-meta-item"><div class="lbl">Data ${it.endDate?'(início → fim)':''}</div><div class="val">${fmtDateFull(it.startDate)}${it.endDate?' → '+fmtDateFull(it.endDate):''}</div></div>
+      <div class="detail-meta-item"><div class="lbl">Status</div><div class="val"><span class="tag tag-status-${it.status}">${STATUS[it.status]?.name||'—'}</span></div></div>
+    </div>
+    ${impactHtml}
+    <div class="detail-section"><h4>Motivo</h4><p>${it.motivation||'—'}</p></div>
+    ${it.kind==='test'?`
+      <div class="detail-section"><h4>Hipótese</h4><p>${it.hypothesis||'—'}</p></div>
+      <div class="detail-section"><h4>Métrica-alvo · Meta de melhoria</h4><p>${it.targetMetric||'—'} · +${it.expectedImprovement||'—'}</p></div>
+    `:''}
+    ${it.learning?`<div class="detail-section"><h4>Aprendizado</h4><p>${it.learning}</p></div>`:''}
+    ${it.attachment?`<div class="detail-section"><h4>Anexo</h4><p><a href="${it.attachment}" target="_blank" style="color:var(--primary)">${it.attachment}</a></p></div>`:''}
+  `;
+  const canFinish = it.kind==='test' && it.status==='running';
+  document.getElementById('panel-foot').innerHTML = `
+    <button class="btn btn-danger btn-sm" onclick="deleteItem('${it.id}')">Excluir</button>
+    <div style="flex:1"></div>
+    <button class="btn btn-ghost btn-sm" onclick="closePanel()">Fechar</button>
+    ${canFinish?`<button class="btn btn-success btn-sm" onclick="openFinishPanel('${it.id}')">Finalizar teste</button>`:''}
+    <button class="btn btn-sm" onclick="openPanel('edit','${it.kind}','${it.id}')">Editar</button>
+  `;
+}
+
+// =========================================
+// PAINEL DE CAMPANHAS
+// =========================================
+let campaignPanelState = {mode:null, kind:null, id:null, date:null};
+
+function openCampaignPanel(mode, kind, id, date){
+  campaignPanelState = {mode, kind, id, date};
+  document.getElementById('panel').classList.add('open');
+  document.getElementById('overlay').classList.add('open');
+  if(mode==='detail') renderCampaignDetail();
+  else renderCampaignForm();
+}
+
+function renderCampaignForm(){
+  const isEC = campaignPanelState.kind==='campaign-ec';
+  const isEdit = campaignPanelState.mode==='edit';
+  const existing = campaignPanelState.id ? data.find(d=>d.id===campaignPanelState.id) : null;
+  const it = existing || {};
+  const initialDate = it.date || campaignPanelState.date || todayISO();
+  const selectedBases = it.bases || [];
+
+  document.getElementById('panel-title').innerHTML = `<span class="kind-badge" style="background:${isEC?'#ddd6fe':'#fce7f3'};color:${isEC?'#6d28d9':'#be185d'}">${isEC?'E-mail Campanha':'WhatsApp Campanha'}</span> ${isEdit?'Editar':'Nova'}`;
+
+  let body = `
+    <div class="form-row">
+      <label>Nome da campanha <span class="required">*</span></label>
+      <input type="text" id="cf-name" value="${it.name||''}" placeholder="${isEC?'Ex.: Drop Coleção SS25':'Ex.: Flash Sale 24h'}">
+    </div>
+    <div class="form-row">
+      <label>Data <span class="required">*</span></label>
+      <input type="date" id="cf-date" value="${initialDate}">
+    </div>
+    <div class="form-row">
+      <label>${isEC?'Bases que vão receber este e-mail':'Base'} <span class="required">*</span></label>
+      <div class="multi-select-grid" id="cf-bases">
+        ${(isEC?EMAIL_BASES:WPP_BASES.map(b=>b.name)).map(b=>{
+          const active = selectedBases.includes(b);
+          const chipClass = !isEC ? ' '+wppBaseKind(b) : '';
+          return `<label class="multi-select-item ${active?'active':''}${chipClass}" data-val="${b}">
+            <input type="checkbox" value="${b}" ${active?'checked':''}>${b}
+          </label>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+
+  if(isEC){
+    body += `
+      <div class="form-row">
+        <label>Horário de disparo <span class="required">*</span></label>
+        <input type="time" id="cf-schedule" value="${it.schedule||'10:00'}">
+      </div>
+      <div class="form-row">
+        <label>Modelo do e-mail <span class="required">*</span></label>
+        <select id="cf-model">
+          <option value="">Selecione…</option>
+          ${Object.entries(EMAIL_MODELS).map(([k,v])=>`<option value="${k}" ${it.emailModel===k?'selected':''}>${v.name}</option>`).join('')}
+        </select>
+      </div>
+    `;
+  } else {
+    const selectedTimes = it.schedule || [];
+    body += `
+      <div class="form-row">
+        <label>Quantidade de pessoas no disparo <span class="required">*</span></label>
+        <input type="number" id="cf-qty" value="${it.quantity||''}" min="1" placeholder="Ex.: 5000">
+      </div>
+      <div class="form-row">
+        <label>Horários de disparo <span class="required">*</span> <span style="font-size:10px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:500">(seleção múltipla · 9h às 21h)</span></label>
+        <div class="multi-select-grid times" id="cf-times">
+          ${WPP_TIMES.map(t=>{
+            const active = selectedTimes.includes(t);
+            return `<label class="multi-select-item ${active?'active':''}" data-val="${t}">
+              <input type="checkbox" value="${t}" ${active?'checked':''}>${t}
+            </label>`;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  document.getElementById('panel-body').innerHTML = body;
+  document.getElementById('panel-foot').innerHTML = `
+    ${isEdit?`<button class="btn btn-danger btn-sm" onclick="deleteItem('${campaignPanelState.id}')">Excluir</button>`:''}
+    <div style="flex:1"></div>
+    <button class="btn btn-ghost btn-sm" onclick="closePanel()">Cancelar</button>
+    <button class="btn" onclick="saveCampaign()">Salvar</button>
+  `;
+
+  // Multi-select click handlers
+  document.querySelectorAll('.multi-select-item').forEach(item=>{
+    item.addEventListener('click', e=>{
+      e.preventDefault();
+      const cb = item.querySelector('input');
+      cb.checked = !cb.checked;
+      item.classList.toggle('active', cb.checked);
+    });
+  });
+}
+
+function saveCampaign(){
+  const isEC = campaignPanelState.kind==='campaign-ec';
+  const name = document.getElementById('cf-name').value.trim();
+  const date = document.getElementById('cf-date').value;
+  const bases = [...document.querySelectorAll('#cf-bases input:checked')].map(i=>i.value);
+
+  if(!name) return toast('Nome da campanha é obrigatório','error');
+  if(!date) return toast('Data é obrigatória','error');
+  if(bases.length===0) return toast('Selecione pelo menos uma base','error');
+
+  const payload = {kind:campaignPanelState.kind, name, date, bases};
+
+  if(isEC){
+    const schedule = document.getElementById('cf-schedule').value;
+    const emailModel = document.getElementById('cf-model').value;
+    if(!schedule) return toast('Horário de disparo é obrigatório','error');
+    if(!emailModel) return toast('Modelo do e-mail é obrigatório','error');
+    payload.schedule = schedule;
+    payload.emailModel = emailModel;
+  } else {
+    const qty = parseInt(document.getElementById('cf-qty').value);
+    const times = [...document.querySelectorAll('#cf-times input:checked')].map(i=>i.value);
+    if(!qty || qty<1) return toast('Quantidade de pessoas é obrigatória','error');
+    if(times.length===0) return toast('Selecione pelo menos um horário','error');
+    payload.quantity = qty;
+    payload.schedule = times;
+  }
+
+  if(campaignPanelState.mode==='edit'){
+    const idx = data.findIndex(d=>d.id===campaignPanelState.id);
+    data[idx] = {...data[idx], ...payload};
+    toast('Campanha atualizada','success');
+  } else {
+    data.push({id:uid(), ...payload, createdAt:new Date().toISOString()});
+    toast('Campanha criada','success');
+  }
+  saveData();
+  closePanel();
+  renderAll();
+}
+
+function renderCampaignDetail(){
+  const it = data.find(d=>d.id===campaignPanelState.id);
+  if(!it){ closePanel(); return; }
+  const isEC = it.kind==='campaign-ec';
+  document.getElementById('panel-title').innerHTML = `<span class="kind-badge" style="background:${isEC?'#ddd6fe':'#fce7f3'};color:${isEC?'#6d28d9':'#be185d'}">${isEC?'E-mail Campanha':'WhatsApp Campanha'}</span> Detalhes`;
+
+  let extraMeta = '';
+  if(isEC){
+    extraMeta = `
+      <div class="detail-meta-item"><div class="lbl">Horário</div><div class="val">${it.schedule||'—'}</div></div>
+      <div class="detail-meta-item"><div class="lbl">Modelo</div><div class="val"><span class="tag-type-dot" style="background:${EMAIL_MODELS[it.emailModel]?.color}"></span>${EMAIL_MODELS[it.emailModel]?.name||'—'}</div></div>
+    `;
+  } else {
+    extraMeta = `
+      <div class="detail-meta-item"><div class="lbl">Quantidade</div><div class="val">${it.quantity?.toLocaleString('pt-BR')||'—'} pessoas</div></div>
+      <div class="detail-meta-item"><div class="lbl">Horários</div><div class="val" style="font-size:12px">${(it.schedule||[]).join(' · ')||'—'}</div></div>
+    `;
+  }
+
+  const basesHtml = (it.bases||[]).map(b=>{
+    if(isEC) return `<span class="chip">${b}</span>`;
+    const kind = wppBaseKind(b);
+    return `<span class="chip ${kind}">${b}</span>`;
+  }).join('');
+
+  document.getElementById('panel-body').innerHTML = `
+    <h3 style="font-size:17px;font-weight:700;margin-bottom:10px">${it.name}</h3>
+    <div class="detail-meta">
+      <div class="detail-meta-item"><div class="lbl">Canal</div><div class="val">${isEC?'E-mail Campanha':'WhatsApp Campanha'}</div></div>
+      <div class="detail-meta-item"><div class="lbl">Data</div><div class="val">${fmtDateFull(it.date)}</div></div>
+      ${extraMeta}
+    </div>
+    <div class="detail-section">
+      <h4>Bases selecionadas (${it.bases?.length||0})</h4>
+      <p>${basesHtml||'—'}</p>
+    </div>
+  `;
+  document.getElementById('panel-foot').innerHTML = `
+    <button class="btn btn-danger btn-sm" onclick="deleteItem('${it.id}')">Excluir</button>
+    <div style="flex:1"></div>
+    <button class="btn btn-ghost btn-sm" onclick="closePanel()">Fechar</button>
+    <button class="btn" onclick="openCampaignPanel('edit','${it.kind}','${it.id}')">Editar</button>
+  `;
+}
+
+// =========================================
+// UTILS
+// =========================================
+function toast(msg, kind=''){
+  const el = document.createElement('div');
+  el.className = 'toast'+(kind?' '+kind:'');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(), 2400);
+}
+function exportData(){
+  const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'crm-log-'+todayISO()+'.json'; a.click();
+  URL.revokeObjectURL(url); toast('JSON exportado','success');
+}
+function resetData(){
+  if(!confirm('Limpar TODOS os registros e voltar aos dados de exemplo?')) return;
+  localStorage.removeItem(STORAGE_KEY); data = loadData();
+  populateAllFilters(); renderAll(); toast('Dados resetados','success');
+}
+function resetFilters(scope){
+  const ids = {
+    list:['f-list-channel','f-list-type','f-list-resp','f-list-kind','f-list-search'],
+    run:['f-run-channel','f-run-kind','f-run-search'],
+    done:['f-done-channel','f-done-kind','f-done-result','f-done-search']
+  }[scope]||[];
+  ids.forEach(id=>{
+    const el=document.getElementById(id);
+    if(el.tagName==='SELECT') el.value='all'; else el.value='';
+  });
+  renderAll();
+}
+
+// =========================================
+// NAVIGATION (tabs + sub-tabs)
+// =========================================
+function updateTopButtons(tab){
+  const hide = (tab==='campaigns');
+  document.querySelectorAll('.header-actions .btn').forEach(btn=>{
+    if(btn.classList.contains('btn-ghost')) return; // mantém Exportar/Resetar
+    btn.style.display = hide ? 'none' : 'inline-flex';
+  });
+}
+
+document.querySelectorAll('.tab-btn').forEach(b=>{
+  b.addEventListener('click',()=>{
+    document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    document.getElementById('page-'+b.dataset.tab).classList.add('active');
+    updateTopButtons(b.dataset.tab);
+    if(b.dataset.tab==='campaigns'){ renderCalendar('cal-ec'); }
+    if(b.dataset.tab==='backlog'){
+      const active = document.querySelector('#page-backlog .sub-tab-btn.active');
+      if(active && active.dataset.sub==='cal') renderCalendar('cal-test');
+    }
+  });
+});
+document.querySelectorAll('.sub-tab-btn').forEach(b=>{
+  b.addEventListener('click',()=>{
+    const parent = b.closest('.page');
+    parent.querySelectorAll('.sub-tab-btn').forEach(x=>x.classList.remove('active'));
+    parent.querySelectorAll('.sub-page').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    const sub = b.dataset.sub;
+    parent.querySelector('#sub-'+sub).classList.add('active');
+    if(sub==='cal') renderCalendar('cal-test');
+    if(sub==='ec') renderCalendar('cal-ec');
+    if(sub==='wc') renderCalendar('cal-wc');
+  });
+});
+
+function populateAllFilters(){
+  ['f-list-channel','f-run-channel','f-done-channel'].forEach(populateChannelSel);
+  populateTypeSel('f-list-type');
+  populateRespSel('f-list-resp');
+}
+
+// Listen filters
+function bindFilterListeners(){
+  ['f-list-channel','f-list-type','f-list-resp','f-list-kind','f-list-search'].forEach(id=>{
+    document.getElementById(id).addEventListener('input', renderList);
+  });
+  ['f-run-channel','f-run-kind','f-run-search'].forEach(id=>{
+    document.getElementById(id).addEventListener('input', renderRunning);
+  });
+  ['f-done-channel','f-done-kind','f-done-result','f-done-search'].forEach(id=>{
+    document.getElementById(id).addEventListener('input', renderDone);
+  });
+}
+
+function renderAll(){
+  renderKPIs(); renderList(); renderRunning(); renderDone(); renderLibrary();
+  ['cal-test','cal-ec','cal-wc'].forEach(k=>{
+    const mount = document.getElementById(calState[k].mount);
+    if(mount && mount.querySelector('.calendar-wrap')) drawCalendar(k);
+  });
+}
+
+// Init
+populateAllFilters();
+bindFilterListeners();
+renderAll();
+</script>
+</body>
+</html>
