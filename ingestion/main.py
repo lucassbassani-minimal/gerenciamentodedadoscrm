@@ -143,8 +143,13 @@ def run_email_flow_ingestion() -> None:
     logger.info("=== E-mail Fluxo: finalizado ===")
 
 
-def run_forms_ingestion() -> None:
-    """Sincroniza formulários e saúde da base → dim_forms, fact_lead_captures, fact_email_health."""
+def run_forms_ingestion(since: date | None = None) -> None:
+    """Sincroniza formulários e saúde da base → dim_forms, fact_lead_captures, fact_email_health.
+
+    Args:
+        since: se informado, força re-busca a partir desta data (ignora latest do banco).
+               Útil para backfill de dias com dados parciais.
+    """
     logger.info("=== Formulários: início ===")
     today = date.today()
     sb = get_supabase_client()
@@ -159,7 +164,10 @@ def run_forms_ingestion() -> None:
     writers.upsert_email_health(sb, active_count, today, channel_ids)
 
     form_id_map = writers.get_form_id_map(sb)
-    if latest.get("form_captures"):
+    if since:
+        form_metrics_since = since
+        logger.info({"event": "forms_backfill_forced", "since": since.isoformat()})
+    elif latest.get("form_captures"):
         form_metrics_since = latest["form_captures"] + timedelta(days=1)
         if form_metrics_since > today:
             logger.info({"event": "forms_skip", "reason": "banco já atualizado"})

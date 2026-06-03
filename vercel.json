@@ -1,8 +1,9 @@
 {
   "rewrites": [
-    { "source": "/",                 "destination": "/api/cron/app" },
-    { "source": "/dashboard-crm.html", "destination": "/api/cron/app" },
-    { "source": "/auth/(.*)",        "destination": "/api/cron/app" }
+    { "source": "/",                    "destination": "/api/cron/app" },
+    { "source": "/dashboard-crm.html",  "destination": "/api/cron/app" },
+    { "source": "/auth/(.*)",           "destination": "/api/cron/app" },
+    { "source": "/admin/(.*)",          "destination": "/api/cron/app" }
   ],
   "crons": [
     { "path": "/api/cron/revenue",        "schedule": "*/35 * * * *" },

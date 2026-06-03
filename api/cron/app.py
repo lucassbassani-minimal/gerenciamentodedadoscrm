@@ -275,7 +275,7 @@ def admin_backfill(job: str):
             run_sheets_ingestion()
         elif job == 'forms':
             from ingestion.main import run_forms_ingestion
-            run_forms_ingestion()
+            run_forms_ingestion(since=_date.fromisoformat(since_str) if since_str else None)
         elif job == 'revenue':
             from ingestion.main import run_smart_shopify_ingestion
             run_smart_shopify_ingestion()
