@@ -2532,7 +2532,7 @@ const EMAIL_MODELS = {
   desformatado: {name:'Desformatado',  color:'#64748b'},
   storytelling: {name:'Storytelling',  color:'#ec4899'}
 };
-const EMAIL_BASES = ['Engajados 90d','VIP / Campeões','Base Geral','Compradores Recentes (30d)','Reativação 60d','Leads (não compraram)','Carrinho Abandonado','Cluster Premium'];
+const EMAIL_BASES = ['Clientes A+', 'Leads A', 'Base total', 'Outros'];
 const WPP_BASES = [
   {name:'Clientes Quentes',kind:'hot', color:'#ef4444'},
   {name:'Clientes Mornos', kind:'warm',color:'#f59e0b'},
@@ -2577,12 +2577,12 @@ function _itemToDb(it){
 function _dbToCampaign(r){
   return { id:r.id, kind:r.kind, name:r.name, date:r.date, bases:r.bases||[],
     schedule:r.schedule||[], emailModel:r.email_model, quantity:r.quantity,
-    createdAt:r.created_at };
+    offer:r.offer||null, createdAt:r.created_at };
 }
 function _campaignToDb(it){
   return { id:it.id, kind:it.kind, name:it.name, date:it.date, bases:it.bases||[],
     schedule:Array.isArray(it.schedule)?it.schedule:[it.schedule].filter(Boolean),
-    email_model:it.emailModel||null, quantity:it.quantity||null };
+    email_model:it.emailModel||null, quantity:it.quantity||null, offer:it.offer||null };
 }
 
 // =========================================
@@ -2958,6 +2958,13 @@ function _renderLogForm(){
           </select></div>
         <div class="log-form-row"><label>Quanto pretende aumentar <span class="required">*</span></label>
           <input type="number" step="0.1" id="lf-expected" value="${it.expectedImprovement??''}" placeholder="Ex.: 3"></div>
+      </div>
+      <div class="log-form-row-2">
+        <div class="log-form-row"><label>Valor atual da métrica <span style="font-size:10px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--muted)">(baseline)</span></label>
+          <input type="number" step="0.01" id="lf-value-before" value="${it.valueBefore??''}" placeholder="Ex.: 23.4"></div>
+        <div style="display:flex;align-items:flex-end;padding-bottom:2px">
+          <span style="font-size:11px;color:var(--muted);line-height:1.4">Deixe vazio se ainda<br>não souber o valor atual.</span>
+        </div>
       </div></div>`:''}
     <div class="log-form-row"><label>Status</label>
       <select id="lf-status">${Object.entries(LOG_STATUS).map(([k,v])=>`<option value="${k}" ${it.status===k?'selected':(!it.status&&k==='planned'?'selected':'')}>${v.name}</option>`).join('')}</select></div>
@@ -2988,6 +2995,8 @@ async function saveLogForm(){
     if(!targetMetric) return logToast('Métrica-alvo é obrigatória','error');
     if(!expectedImprovement) return logToast('Indique quanto pretende aumentar','error');
     payload.endDate=endDate; payload.hypothesis=hypothesis; payload.targetMetric=targetMetric; payload.expectedImprovement=parseFloat(expectedImprovement);
+    const vb=document.getElementById('lf-value-before')?.value;
+    payload.valueBefore=vb!==''&&vb!=null?parseFloat(vb):null;
   }
   let savedItem;
   if(_logPanelState.mode==='edit'){
@@ -3022,13 +3031,13 @@ function _renderLogFinishForm(){
       <div class="detail-meta-item"><div class="lbl">Período</div><div class="val">${logFmtDate(it.startDate)} → ${logFmtDate(it.endDate)}</div></div>
     </div>
     <div class="form-section finish"><div class="form-section-title">📊 Resultado do teste</div>
-      <div class="log-form-row-2">
-        <div class="log-form-row"><label>Valor antes <span class="required">*</span></label>
-          <input type="number" step="0.01" id="lf-before" value="${it.valueBefore??''}" placeholder="Ex.: 23.4"></div>
-        <div class="log-form-row"><label>Valor depois <span class="required">*</span></label>
-          <input type="number" step="0.01" id="lf-after" value="${it.valueAfter??''}" placeholder="Ex.: 27.1"></div>
-      </div>
-      <div id="lf-finish-preview" style="font-size:12px;color:var(--muted);padding:8px 12px;background:#fff;border-radius:6px;margin-bottom:10px">Preencha os valores para ver o cálculo</div>
+      ${it.valueBefore!=null
+        ?`<div class="delta-row" style="margin-bottom:12px"><span>${it.targetMetric||'Métrica'} · Valor atual (baseline)</span><strong>${it.valueBefore}</strong></div>`
+        :`<div class="log-form-row"><label>Valor atual / baseline <span style="font-size:10px;text-transform:none;letter-spacing:0;font-weight:400">(não registrado na criação)</span></label>
+            <input type="number" step="0.01" id="lf-before" placeholder="Ex.: 23.4"></div>`}
+      <div class="log-form-row"><label>Valor final obtido <span class="required">*</span></label>
+        <input type="number" step="0.01" id="lf-after" value="${it.valueAfter??''}" placeholder="Ex.: 27.1"></div>
+      <div id="lf-finish-preview" style="font-size:12px;color:var(--muted);padding:8px 12px;background:#fff;border-radius:6px;margin-bottom:10px">Preencha o valor final para ver o resultado</div>
       <div class="log-form-row"><label>Aprendizado / Conclusão <span class="required">*</span></label>
         <textarea id="lf-learning" placeholder="O que aprendemos? Devemos replicar ou evitar?">${it.learning||''}</textarea></div>
     </div>`;
@@ -3037,10 +3046,11 @@ function _renderLogFinishForm(){
     <button class="btn btn-ghost btn-sm" onclick="closeLogPanel()">Cancelar</button>
     <button class="btn btn-success" onclick="saveLogFinish('${it.id}')">Finalizar teste</button>`;
   const update=()=>{
-    const b=parseFloat(document.getElementById('lf-before')?.value);
+    const storedB2 = it.valueBefore;
+    const b = storedB2!=null ? storedB2 : parseFloat(document.getElementById('lf-before')?.value);
     const a=parseFloat(document.getElementById('lf-after')?.value);
     const prev=document.getElementById('lf-finish-preview'); if(!prev) return;
-    if(isNaN(b)||isNaN(a)){prev.textContent='Preencha os valores para ver o cálculo';return;}
+    if(isNaN(b)||isNaN(a)){prev.textContent='Preencha o valor final para ver o resultado';return;}
     const delta=a-b,target=it.expectedImprovement;
     let label,color;
     if(delta>=target){label='✅ POSITIVO — atingiu a meta';color='#10b981';}
@@ -3050,14 +3060,16 @@ function _renderLogFinishForm(){
   };
   document.getElementById('lf-before')?.addEventListener('input',update);
   document.getElementById('lf-after')?.addEventListener('input',update);
+  update();
 }
 async function saveLogFinish(id){
   const it=logData.find(d=>d.id===id); if(!it) return;
-  const b=parseFloat(document.getElementById('lf-before')?.value);
+  const storedBefore = it.valueBefore;
+  const b = storedBefore!=null ? storedBefore : parseFloat(document.getElementById('lf-before')?.value);
   const a=parseFloat(document.getElementById('lf-after')?.value);
   const learning=(document.getElementById('lf-learning')?.value||'').trim();
-  if(isNaN(b)) return logToast('Valor antes é obrigatório','error');
-  if(isNaN(a)) return logToast('Valor depois é obrigatório','error');
+  if(isNaN(b)) return logToast('Informe o valor atual/baseline','error');
+  if(isNaN(a)) return logToast('Valor final é obrigatório','error');
   if(!learning) return logToast('Aprendizado é obrigatório','error');
   const delta=a-b,target=it.expectedImprovement;
   it.valueBefore=b; it.valueAfter=a; it.learning=learning;
@@ -3129,11 +3141,20 @@ function _renderLogCampaignForm(){
     <div class="log-form-row"><label>${isEC?'Bases que vão receber':'Base'} <span class="required">*</span></label>
     <div class="multi-select-grid" id="cf-bases">
       ${(isEC?EMAIL_BASES:WPP_BASES.map(b=>b.name)).map(b=>{
-        const active=selBases.includes(b);
+        const isOutros = b === 'Outros';
+        const active = isOutros
+          ? selBases.some(s=>s.startsWith('Outros'))
+          : selBases.includes(b);
         return `<label class="multi-select-item${active?' active':''}${!isEC?' '+wppBaseKind(b):''}" data-val="${b}">
           <input type="checkbox" value="${b}" ${active?'checked':''}>${b}</label>`;
       }).join('')}
-    </div></div>`;
+    </div>
+    ${isEC?`<div id="cf-outros-wrap" style="margin-top:8px;display:${selBases.some(s=>s.startsWith('Outros'))?'block':'none'}">
+      <input type="text" id="cf-outros-text" placeholder="Especifique a base..."
+        value="${selBases.find(s=>s.startsWith('Outros:'))?.replace('Outros: ','')||''}"
+        style="width:100%;border:1px solid var(--border);padding:8px 11px;border-radius:6px;font-size:13px;margin-top:4px">
+    </div>`:''}
+    </div>`;
   if(isEC){
     body+=`<div class="log-form-row"><label>Horário <span class="required">*</span></label>
       <input type="time" id="cf-schedule" value="${it.schedule?.[0]||it.schedule||'10:00'}"></div>
@@ -3143,7 +3164,9 @@ function _renderLogCampaignForm(){
       </select></div>`;
   } else {
     const selTimes=it.schedule||[];
-    body+=`<div class="log-form-row"><label>Quantidade de pessoas <span class="required">*</span></label>
+    body+=`<div class="log-form-row"><label>Oferta da campanha</label>
+      <textarea id="cf-offer" placeholder="Ex.: 20% OFF, Frete Grátis, Kit exclusivo, Sorteio..." style="min-height:60px">${it.offer||''}</textarea></div>
+      <div class="log-form-row"><label>Quantidade de pessoas <span class="required">*</span></label>
       <input type="number" id="cf-qty" value="${it.quantity||''}" min="1" placeholder="Ex.: 5000"></div>
       <div class="log-form-row"><label>Horários de disparo <span class="required">*</span></label>
       <div class="multi-select-grid times" id="cf-times">
@@ -3158,18 +3181,31 @@ function _renderLogCampaignForm(){
     <button class="btn btn-ghost btn-sm" onclick="closeLogPanel()">Cancelar</button>
     <button class="btn" onclick="saveLogCampaign()">Salvar</button>`;
   document.querySelectorAll('#log-panel .multi-select-item').forEach(item=>{
-    item.addEventListener('click',e=>{e.preventDefault();const cb=item.querySelector('input');cb.checked=!cb.checked;item.classList.toggle('active',cb.checked);});
+    item.addEventListener('click',e=>{
+      e.preventDefault();
+      const cb=item.querySelector('input'); cb.checked=!cb.checked;
+      item.classList.toggle('active',cb.checked);
+      // Mostra/esconde campo "Outros" no e-mail campanha
+      if(item.dataset.val==='Outros'){
+        const wrap=document.getElementById('cf-outros-wrap');
+        if(wrap){ wrap.style.display=cb.checked?'block':'none'; if(!cb.checked){ const tf=document.getElementById('cf-outros-text'); if(tf) tf.value=''; }}
+      }
+    });
   });
 }
 async function saveLogCampaign(){
   const isEC=_logCampPanelState.kind==='campaign-ec';
   const name=(document.getElementById('cf-name')?.value||'').trim();
   const date=document.getElementById('cf-date')?.value||'';
-  const bases=[...document.querySelectorAll('#cf-bases input:checked')].map(i=>i.value);
+  let bases=[...document.querySelectorAll('#cf-bases input:checked')].map(i=>i.value);
+  // Substitui 'Outros' pelo texto especificado
+  const outrosText=(document.getElementById('cf-outros-text')?.value||'').trim();
+  bases=bases.map(b=>b==='Outros'?(outrosText?'Outros: '+outrosText:'Outros'):b);
   if(!name) return logToast('Nome é obrigatório','error');
   if(!date) return logToast('Data é obrigatória','error');
   if(!bases.length) return logToast('Selecione pelo menos uma base','error');
-  const payload={kind:_logCampPanelState.kind,name,date,bases};
+  const offer=(document.getElementById('cf-offer')?.value||'').trim()||null;
+  const payload={kind:_logCampPanelState.kind,name,date,bases,offer};
   if(isEC){
     const schedule=document.getElementById('cf-schedule')?.value||'';
     const emailModel=document.getElementById('cf-model')?.value||'';
@@ -3204,7 +3240,7 @@ function _renderLogCampaignDetail(){
     <div class="detail-meta-item"><div class="lbl">Modelo</div><div class="val"><span class="tag-type-dot" style="background:${EMAIL_MODELS[it.emailModel]?.color}"></span>${EMAIL_MODELS[it.emailModel]?.name||'—'}</div></div>`
     :`<div class="detail-meta-item"><div class="lbl">Quantidade</div><div class="val">${it.quantity?.toLocaleString('pt-BR')||'—'} pessoas</div></div>
     <div class="detail-meta-item"><div class="lbl">Horários</div><div class="val" style="font-size:12px">${(it.schedule||[]).join(' · ')||'—'}</div></div>`;
-  const basesHtml=(it.bases||[]).map(b=>isEC?`<span class="chip">${b}</span>`:`<span class="chip ${wppBaseKind(b)}">${b}</span>`).join('');
+  const basesHtml=(it.bases||[]).map(b=>isEC?`<span class="chip">${b}</span>`:`<span class="chip ${wppBaseKind(b.split(':')[0].trim())}">${b}</span>`).join('');
   document.getElementById('log-panel-body').innerHTML=`
     <h3 style="font-size:17px;font-weight:700;margin-bottom:10px">${it.name}</h3>
     <div class="detail-meta">
@@ -3212,6 +3248,7 @@ function _renderLogCampaignDetail(){
       <div class="detail-meta-item"><div class="lbl">Data</div><div class="val">${logFmtDateFull(it.date)}</div></div>
       ${extraMeta}
     </div>
+    ${!isEC&&it.offer?`<div class="detail-section"><h4>Oferta da campanha</h4><p style="background:#fef3c7;padding:10px 12px;border-radius:6px;border-left:3px solid #f59e0b">${it.offer}</p></div>`:''}
     <div class="detail-section"><h4>Bases selecionadas (${it.bases?.length||0})</h4><p>${basesHtml||'—'}</p></div>`;
   document.getElementById('log-panel-foot').innerHTML=`
     <button class="btn btn-danger btn-sm" onclick="deleteLogItem('${it.id}')">Excluir</button>
