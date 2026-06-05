@@ -533,6 +533,57 @@ def upsert_sessions(sb: Client, rows: list[SessionRow], channel_ids: dict[str, s
     return len(records)
 
 
+def get_flow_message_structure(sb: Client) -> list[dict]:
+    """Retorna [{flow_id, flow_name, message_id, message_name}] lendo de dim_assets + dim_asset_items.
+
+    Substitui as chamadas de estrutura à API do Klaviyo no cron de métricas.
+    Só retorna fluxos com is_active=True para espelhar o comportamento original de
+    buscar apenas fluxos com status 'live'.
+    """
+    flows_resp = (
+        sb.table("dim_assets")
+        .select("id,external_id,name")
+        .eq("type", "flow")
+        .eq("source_tool", "klaviyo")
+        .eq("is_active", True)
+        .limit(1000)
+        .execute()
+    )
+    if not flows_resp.data:
+        return []
+
+    flow_uuid_to_info: dict[str, tuple[str, str]] = {
+        row["id"]: (row["external_id"], row["name"])
+        for row in flows_resp.data
+    }
+
+    messages: list[dict] = []
+    ids_list = list(flow_uuid_to_info.keys())
+    chunk_size = 50
+    for i in range(0, len(ids_list), chunk_size):
+        chunk = ids_list[i : i + chunk_size]
+        items_resp = (
+            sb.table("dim_asset_items")
+            .select("external_id,asset_id,name")
+            .eq("type", "email")
+            .in_("asset_id", chunk)
+            .limit(10000)
+            .execute()
+        )
+        for row in items_resp.data:
+            info = flow_uuid_to_info.get(row["asset_id"])
+            if info:
+                messages.append({
+                    "flow_id":      info[0],
+                    "flow_name":    info[1],
+                    "message_id":   row["external_id"],
+                    "message_name": row["name"],
+                })
+
+    logger.info({"event": "flow_structure_loaded_from_db", "messages": len(messages)})
+    return messages
+
+
 def upsert_sessions_utm(sb: Client, rows: list[SessionUtmRow], channel_ids: dict[str, str]) -> int:
     if not rows:
         return 0

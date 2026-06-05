@@ -8,9 +8,9 @@ class KlaviyoFlow(BaseModel):
     id: str
     name: str
     status: Literal["live", "draft", "manual", "paused"]
-    trigger_type: str
-    created: datetime
-    updated: datetime
+    trigger_type: str | None = None
+    created: datetime | None = None
+    updated: datetime | None = None
 
 
 class KlaviyoFlowMessage(BaseModel):
@@ -18,8 +18,8 @@ class KlaviyoFlowMessage(BaseModel):
     flow_id: str
     name: str
     position: int | None = None
-    created: datetime
-    updated: datetime
+    created: datetime | None = None
+    updated: datetime | None = None
 
 
 class KlaviyoCampaign(BaseModel):

@@ -41,7 +41,7 @@ def run_for_period(date_from: date, date_to: date) -> None:
     try:
         sb = get_supabase_client()
         client = make_client()
-        rows = fetch_flow_email_metrics(client, date_from, date_to)
+        rows = fetch_flow_email_metrics(client, sb, date_from, date_to)
         count = writers.upsert_flow_email_metrics(sb, rows)
         logger.info({"event": "run_done", "rows_upserted": count})
     except Exception as e:

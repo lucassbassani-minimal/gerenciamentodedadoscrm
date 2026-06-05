@@ -6,14 +6,16 @@
     { "source": "/admin/(.*)",          "destination": "/api/cron/app" }
   ],
   "crons": [
-    { "path": "/api/cron/revenue",        "schedule": "*/35 * * * *" },
-    { "path": "/api/cron/sessions",       "schedule": "10 * * * *"  },
-    { "path": "/api/cron/email_flow",     "schedule": "0 7 * * *"   },
-    { "path": "/api/cron/email_campaign", "schedule": "30 3 * * *"  },
-    { "path": "/api/cron/forms",          "schedule": "0 9 * * *"   }
+    { "path": "/api/cron/revenue",          "schedule": "*/35 * * * *" },
+    { "path": "/api/cron/sessions",         "schedule": "10 * * * *"   },
+    { "path": "/api/cron/email_structure",  "schedule": "0 6 * * *"    },
+    { "path": "/api/cron/email_flow",       "schedule": "0 7 * * *"    },
+    { "path": "/api/cron/email_campaign",   "schedule": "30 3 * * *"   },
+    { "path": "/api/cron/forms",            "schedule": "0 9 * * *"    }
   ],
   "functions": {
-    "api/cron/email_flow.py": { "maxDuration": 800 },
-    "api/cron/app.py":        { "maxDuration": 800 }
+    "api/cron/email_structure.py": { "maxDuration": 600 },
+    "api/cron/email_flow.py":      { "maxDuration": 900 },
+    "api/cron/app.py":             { "maxDuration": 800 }
   }
 }

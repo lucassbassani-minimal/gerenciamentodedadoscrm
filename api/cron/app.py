@@ -208,6 +208,23 @@ def sessions():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/cron/email_structure', methods=['GET'])
+def email_structure():
+    if not _authorized():
+        return jsonify({'error': 'unauthorized'}), 401
+    try:
+        from ingestion.flow_structure_daily import run_structure_sync
+        run_structure_sync()
+        from ingestion.alert import log_cron
+        log_cron('email_structure', 'ok')
+        return jsonify({'status': 'ok', 'job': 'email_structure'})
+    except Exception as e:
+        logger.error({'event': 'cron_failed', 'job': 'email_structure', 'error': str(e)})
+        from ingestion.alert import send_failure_alert
+        send_failure_alert('email_structure', str(e))
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/cron/email_flow', methods=['GET'])
 def email_flow():
     if not _authorized():
@@ -252,7 +269,7 @@ def admin_backfill(job: str):
       /admin/backfill/forms
       /admin/backfill/revenue
     """
-    VALID = {'email_flow', 'email_campaign', 'sessions', 'forms', 'revenue'}
+    VALID = {'email_flow', 'email_campaign', 'email_structure', 'sessions', 'forms', 'revenue'}
     if job not in VALID:
         return jsonify({'error': f'Job inválido. Use: {sorted(VALID)}'}), 400
 
@@ -261,7 +278,10 @@ def admin_backfill(job: str):
 
     try:
         from datetime import date as _date
-        if job == 'email_flow':
+        if job == 'email_structure':
+            from ingestion.flow_structure_daily import run_structure_sync
+            run_structure_sync()
+        elif job == 'email_flow':
             from ingestion.flow_metrics_daily import run_for_period, run_yesterday
             if since_str:
                 run_for_period(_date.fromisoformat(since_str), _date.fromisoformat(until_str))

@@ -1,11 +1,12 @@
 import os
 import time
 import logging
-from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 import httpx
+from supabase import Client
 
+from ingestion.db.writers import get_flow_message_structure
 from ingestion.models.klaviyo_models import KlaviyoFlowEmailMetric
 
 logger = logging.getLogger(__name__)
@@ -22,21 +23,6 @@ FLOW_METRIC_MAP: dict[str, str] = {
     "email_aberto":  "Opened Email",
     "email_clicado": "Clicked Email",
 }
-
-
-@dataclass
-class _FlowMessage:
-    flow_id: str
-    flow_name: str
-    message_id: str
-    message_name: str
-
-
-@dataclass
-class _FlowInfo:
-    flow_id: str
-    flow_name: str
-    messages: list[_FlowMessage] = field(default_factory=list)
 
 
 def make_client() -> httpx.Client:
@@ -113,44 +99,6 @@ def _fetch_metric_ids(client: httpx.Client) -> dict[str, str]:
     return mapping
 
 
-def _fetch_active_flows(client: httpx.Client) -> list[_FlowInfo]:
-    items = _paginate(client, "/flows/", {
-        "fields[flow]": "name,status",
-        "filter": "and(equals(status,'live'),equals(archived,false))",
-    })
-    flows = []
-    for item in items:
-        flows.append(_FlowInfo(
-            flow_id=item["id"],
-            flow_name=item["attributes"]["name"],
-        ))
-    logger.info({"event": "active_flows_fetched", "count": len(flows)})
-    return flows
-
-
-def _fetch_flow_messages(client: httpx.Client, flow: _FlowInfo) -> None:
-    """Popula flow.messages com todos os e-mails (flow-messages) do fluxo.
-
-    Hierarquia: Fluxo -> SEND_EMAIL actions -> flow-messages (e-mails individuais).
-    O filtro de métrica usa o message_id (ID da flow-message), igual ao N8N.
-    """
-    actions = _paginate(client, f"/flows/{flow.flow_id}/flow-actions/", {
-        "fields[flow-action]": "action_type",
-        "filter": "equals(action_type,'SEND_EMAIL')",
-    })
-    for action in actions:
-        messages = _paginate(client, f"/flow-actions/{action['id']}/flow-messages/", {
-            "fields[flow-message]": "name",
-        })
-        for msg in messages:
-            flow.messages.append(_FlowMessage(
-                flow_id=flow.flow_id,
-                flow_name=flow.flow_name,
-                message_id=msg["id"],
-                message_name=msg["attributes"].get("name") or msg["id"],
-            ))
-
-
 def _aggregate_for_message(
     client: httpx.Client,
     metric_id: str,
@@ -186,61 +134,54 @@ def _aggregate_for_message(
 
 def fetch_flow_email_metrics(
     client: httpx.Client,
+    sb: Client,
     date_from: date,
     date_to: date,
 ) -> list[KlaviyoFlowEmailMetric]:
     """Busca métricas diárias de e-mails de todos os fluxos ativos.
 
-    Para cada fluxo ativo:
-      1. Busca SEND_EMAIL actions
-      2. Para cada action, busca flow-messages (e-mails individuais)
-      3. Para cada message x 3 métricas, chama metric-aggregates filtrando por message_id
-      4. Grava uma linha por (message_id, date)
+    Lê a estrutura de fluxos e mensagens do banco (dim_assets + dim_asset_items)
+    em vez de chamar a API do Klaviyo para mapeamento — reduz ~500 chamadas GET
+    por execução e elimina os 429s na fase de estrutura.
+
+    Para cada mensagem x 3 métricas, chama metric-aggregates filtrando por message_id.
     """
-    flows = _fetch_active_flows(client)
-    if not flows:
-        return []
-
-    for flow in flows:
-        _fetch_flow_messages(client, flow)
-        logger.info({
-            "event": "flow_messages_fetched",
-            "flow_name": flow.flow_name,
-            "messages": len(flow.messages),
-        })
-
-    all_messages = [msg for flow in flows for msg in flow.messages]
+    all_messages = get_flow_message_structure(sb)
     if not all_messages:
-        logger.warning({"event": "no_flow_messages_found"})
+        logger.warning({
+            "event": "no_flow_messages_in_db",
+            "hint": "execute o cron email_structure antes de email_flow",
+        })
         return []
 
     logger.info({
         "event": "flow_metrics_start",
-        "flows": len(flows),
         "messages": len(all_messages),
         "date_from": date_from.isoformat(),
         "date_to": date_to.isoformat(),
     })
 
     metric_ids = _fetch_metric_ids(client)
-    rows: dict[tuple[str, str], dict] = {}  # (message_id, date_str) -> row
+    rows: dict[tuple[str, str], dict] = {}
 
     for msg in all_messages:
         for col_name, metric_name in FLOW_METRIC_MAP.items():
             metric_id = metric_ids.get(metric_name)
             if not metric_id:
                 continue
-            counts = _aggregate_for_message(client, metric_id, msg.message_id, date_from, date_to)
+            counts = _aggregate_for_message(
+                client, metric_id, msg["message_id"], date_from, date_to
+            )
             for date_str, count in counts.items():
                 if count == 0:
                     continue
-                key = (msg.message_id, date_str)
+                key = (msg["message_id"], date_str)
                 if key not in rows:
                     rows[key] = {
-                        "flow_id":       msg.flow_id,
-                        "flow_name":     msg.flow_name,
-                        "message_id":    msg.message_id,
-                        "message_name":  msg.message_name,
+                        "flow_id":       msg["flow_id"],
+                        "flow_name":     msg["flow_name"],
+                        "message_id":    msg["message_id"],
+                        "message_name":  msg["message_name"],
                         "data":          date.fromisoformat(date_str),
                         "email_enviado": 0,
                         "email_aberto":  0,
@@ -248,7 +189,11 @@ def fetch_flow_email_metrics(
                     }
                 rows[key][col_name] = count
 
-        logger.info({"event": "message_processed", "flow_name": msg.flow_name, "message_id": msg.message_id})
+        logger.info({
+            "event": "message_processed",
+            "flow_name": msg["flow_name"],
+            "message_id": msg["message_id"],
+        })
 
     result = [KlaviyoFlowEmailMetric.model_validate(r) for r in rows.values()]
     logger.info({"event": "flow_metrics_done", "rows": len(result)})
