@@ -319,6 +319,38 @@ def admin_backfill(job: str):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/admin/community-message', methods=['POST'])
+def admin_community_message():
+    """Grava ou atualiza corpo e mídia de uma mensagem da comunidade.
+    Body JSON: { "utm_content": "msg86", "body": "...", "media_url": "..." }
+    Requer autenticação (cookie sb_token).
+    """
+    if _AUTH_ENABLED and not _get_auth_email():
+        return jsonify({'error': 'unauthorized'}), 401
+    data = request.get_json() or {}
+    utm_content = (data.get('utm_content', '') or '').strip()
+    body        = (data.get('body', '') or '').strip() or None
+    media_url   = (data.get('media_url', '') or '').strip() or None
+    if not utm_content:
+        return jsonify({'error': 'utm_content é obrigatório'}), 400
+    try:
+        from datetime import datetime, timezone
+        from supabase import create_client as _sb_admin
+        sb = _sb_admin(
+            os.environ['SUPABASE_URL'],
+            os.environ['SUPABASE_SERVICE_ROLE_KEY'],
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        sb.table('dim_community_messages').upsert(
+            {'utm_content': utm_content, 'body': body, 'media_url': media_url, 'updated_at': now},
+            on_conflict='utm_content',
+        ).execute()
+        return jsonify({'status': 'ok', 'utm_content': utm_content})
+    except Exception as e:
+        logger.error({'event': 'community_message_failed', 'utm_content': utm_content, 'error': str(e)})
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/admin/utm-config', methods=['POST'])
 def admin_utm_config():
     """Grava ou atualiza utm_campaign de um fluxo em flow_utm_config.
