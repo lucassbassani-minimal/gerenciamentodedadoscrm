@@ -1624,10 +1624,13 @@ function channelHTML(key){
   const ch = CHANNELS[key];
   const cfg = CFG[key];
   const isCommunity = key==='co';
+  const efBtn = key === 'ef'
+    ? '<div style="display:flex;align-items:center;gap:8px"><span id="ef-refresh-status" style="font-size:11px;color:var(--muted)"></span><button class="btn btn-ghost btn-sm" id="btn-refresh-ef" onclick="triggerEmailFlowRefresh()">&#x21BB; Atualizar D-1</button></div>'
+    : '';
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;margin:24px 0 10px">
       <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px">${ch.name} · KPIs do canal</div>
-      ${key==='ef'?`<div style="display:flex;align-items:center;gap:8px"><span id="ef-refresh-status" style="font-size:11px;color:var(--muted)"></span><button class="btn btn-ghost btn-sm" id="btn-refresh-ef" onclick="triggerEmailFlowRefresh()">↻ Atualizar D-1</button></div>`:''}
+      ${efBtn}
     </div>
     <div class="grid grid-6" id="kpi-${key}"></div>
 
