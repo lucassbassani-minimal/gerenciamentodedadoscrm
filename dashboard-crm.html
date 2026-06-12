@@ -1338,7 +1338,7 @@ async function fetchWppFlowInscritos() {
 }
 async function fetchWppFlowLeads(start, end) {
   const { data } = await _sb.from('vw_wpp_flow_leads')
-    .select('flow_name,data,respostas,destravar_objecao,necessita_atencao')
+    .select('flow_name,data,respostas,destravar_objecao,necessita_atencao,total_leads')
     .gte('data', start).lte('data', end);
   return data || [];
 }
@@ -2209,17 +2209,22 @@ async function renderChannel(key){
   } else if(key === 'wf') {
     // WPP Fluxo — dados reais do banco
     const totalInscritos = wppInscritosByFlow.reduce((sum, r) => sum + (+r.total_inscritos || 0), 0);
+    const totalDisparos  = wppLeadsRows.reduce((sum, r) => sum + (+r.total_leads || 0), 0);
     const totalRespostas = wppLeadsRows.reduce((sum, r) => sum + (+r.respostas || 0), 0);
     const totalDestravar = wppLeadsRows.reduce((sum, r) => sum + (+r.destravar_objecao || 0), 0);
     const totalNecessita = wppLeadsRows.reduce((sum, r) => sum + (+r.necessita_atencao || 0), 0);
     spec = [
-      {label:'Inscritos',          val: totalInscritos > 0 ? fmtInt(totalInscritos) : '—'},
-      {label:'Respostas',          val: fmtInt(totalRespostas)},
-      {label:'Taxa de Resposta',   val: totalInscritos > 0 ? fmtPct1(safe(totalRespostas, totalInscritos)) : '—'},
-      {label:'Destravar Objeção',  val: fmtInt(totalDestravar)},
-      {label:'Necessita Atenção',  val: fmtInt(totalNecessita)},
-      {label:'Receita / Inscrito', val: totalInscritos > 0 ? fmtBRL2(safe(s.rev, totalInscritos)) : '—'},
-      {label:'Receita / Compra',   val: s.purchases > 0 ? fmtBRL2(safe(s.rev, s.purchases)) : '—'},
+      {label:'Inscritos',                       val: totalInscritos > 0 ? fmtInt(totalInscritos) : '—'},
+      {label:'Disparos (leads criados)',         val: totalDisparos > 0 ? fmtInt(totalDisparos) : '—'},
+      {label:'Cobertura (Disp./Insc.)',          val: totalInscritos > 0 && totalDisparos > 0 ? fmtPct1(safe(totalDisparos, totalInscritos)) : '—'},
+      {label:'Respostas',                        val: fmtInt(totalRespostas)},
+      {label:'Taxa de Resposta',                 val: totalDisparos > 0 ? fmtPct1(safe(totalRespostas, totalDisparos)) : '—'},
+      {label:'Destravar Objeção',                val: fmtInt(totalDestravar)},
+      {label:'Necessita Atenção',                val: fmtInt(totalNecessita)},
+      {label:'Retenção da IA',                   val: totalRespostas > 0 ? fmtPct1(safe(totalRespostas - totalNecessita, totalRespostas)) : '—'},
+      {label:'Conversão Resposta → Venda',       val: totalRespostas > 0 ? fmtPct1(safe(s.purchases, totalRespostas)) : '—'},
+      {label:'Receita / Inscrito',               val: totalInscritos > 0 ? fmtBRL2(safe(s.rev, totalInscritos)) : '—'},
+      {label:'Receita / Disparo',                val: totalDisparos > 0 ? fmtBRL2(safe(s.rev, totalDisparos)) : '—'},
     ];
   } else {
     // WPP Campanha — mock (sem integração Vekta ainda)
