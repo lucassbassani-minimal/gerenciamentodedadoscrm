@@ -1390,7 +1390,7 @@ const SLUG_ORDER = ['email_flow','email_campaign','wpp_flow','wpp_campaign','wpp
 const CFG = {
   ef:{ topPerInscrito:true,  topPerDisparo:false, rankingMetric:'inscrito', rankingLabel:'Receita / Inscrito', drillDown:true,  pieceLabel:'E-mail', showInscritos:true,  hasHealth:false },
   ec:{ topPerInscrito:false, topPerDisparo:true,  rankingMetric:'disparo',  rankingLabel:'Receita / Disparo',  drillDown:false, pieceLabel:'E-mail', showInscritos:false, hasHealth:false },
-  wf:{ topPerInscrito:true,  topPerDisparo:false, rankingMetric:'inscrito', rankingLabel:'Receita / Inscrito', drillDown:true,  pieceLabel:'Template',showInscritos:true, hasHealth:false },
+  wf:{ topPerInscrito:false, topPerDisparo:true,  rankingMetric:'disparo',  rankingLabel:'Receita / Disparo',  drillDown:true,  pieceLabel:'Template',showInscritos:false, hasHealth:false },
   wc:{ topPerInscrito:false, topPerDisparo:true,  rankingMetric:'disparo',  rankingLabel:'Receita / Disparo',  drillDown:true,  pieceLabel:'Template',showInscritos:false,hasHealth:false },
   co:{ topPerInscrito:false, topPerDisparo:true,  rankingMetric:'disparo',  rankingLabel:'Receita / Disparo',  drillDown:false, pieceLabel:'Mensagem',showInscritos:false,hasHealth:false }
 };
@@ -1882,7 +1882,6 @@ async function renderChannel(key){
       fetches.push(fetchCommunityMessageRevenue());
     }
     if (key === 'wf') {
-      fetches.push(fetchWppFlowInscritos());
       fetches.push(fetchWppFlowLeads(start, end));
       fetches.push(fetchWppFlowUnknown());
     }
@@ -1905,7 +1904,7 @@ async function renderChannel(key){
       for (const r of (results[7].data || [])) em001ByDay[(r.data||'').slice(0,10)] = +r.sends || 0;
     }
     if (isCommunity) { communityDaily = results[4] || []; communityMsgRows = results[5] || []; }
-    if (key === 'wf') { wppInscritosByFlow = results[4] || []; wppLeadsRows = results[5] || []; wppUnknownRows = results[6] || []; }
+    if (key === 'wf') { wppLeadsRows = results[4] || []; wppUnknownRows = results[5] || []; }
   } catch(err) {
     document.getElementById('kpi-'+key).innerHTML =
       `<div style="grid-column:1/-1;color:var(--danger);padding:20px">Erro ao carregar: ${err.message}</div>`;
@@ -2148,25 +2147,30 @@ async function renderChannel(key){
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'R$/disparo: '+fmtBRL2(c.parsed.y)}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},maxRotation:0}},y:{ticks:{callback:v=>fmtBRL2(v),font:{size:10}},grid:{color:'#f1f4f8'}}}}
     });
   } else if(key === 'wf') {
-    // WPP Fluxo: Receita / Inscrito por dia (inscritos = base acumulada desde 2026-06-12)
-    const wppTotalInscritos = wppInscritosByFlow.reduce((sum, r) => sum + (+r.total_inscritos || 0), 0);
+    // WPP Fluxo: Receita / Disparo por dia (disparos = leads únicos do dia)
+    const wppDisparosByDay = {};
+    for (const r of wppLeadsRows) {
+      const d = (r.data || '').slice(0, 10);
+      wppDisparosByDay[d] = (wppDisparosByDay[d] || 0) + (+r.total_leads || 0);
+    }
     const wppCutoff = '2026-06-12';
-    const revPorInscritoWpp = dates.map(d => {
+    const revPorDisparoWpp = dates.map(d => {
       if (d < wppCutoff) return null;
-      const rev = byDay[d]?.revenue_brl || 0;
-      return (wppTotalInscritos > 0 && rev > 0) ? rev / wppTotalInscritos : null;
+      const rev      = byDay[d]?.revenue_brl || 0;
+      const disparos = wppDisparosByDay[d]   || 0;
+      return (disparos > 0 && rev > 0) ? rev / disparos : null;
     });
     mkChart('chart-eff-'+key, {
       type:'line',
       data:{labels:dlabels, datasets:[{
-        label:'Receita / Inscrito',
-        data:revPorInscritoWpp,
+        label:'Receita / Disparo',
+        data:revPorDisparoWpp,
         borderColor:ch.color, backgroundColor:ch.color+'22',
         fill:true, tension:.35, pointRadius:3, pointBackgroundColor:ch.color, borderWidth:2,
         spanGaps:false,
       }]},
       options:{responsive:true, maintainAspectRatio:false,
-        plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>'R$/inscrito: '+fmtBRL2(c.parsed.y)}}},
+        plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>'R$/disparo: '+fmtBRL2(c.parsed.y)}}},
         scales:{x:{grid:{display:false}, ticks:{font:{size:9}, maxRotation:0}},
                 y:{ticks:{callback:v=>fmtBRL2(v), font:{size:10}}, grid:{color:'#f1f4f8'}}}}
     });
@@ -2208,23 +2212,19 @@ async function renderChannel(key){
     ];
   } else if(key === 'wf') {
     // WPP Fluxo — dados reais do banco
-    const totalInscritos = wppInscritosByFlow.reduce((sum, r) => sum + (+r.total_inscritos || 0), 0);
     const totalDisparos  = wppLeadsRows.reduce((sum, r) => sum + (+r.total_leads || 0), 0);
     const totalRespostas = wppLeadsRows.reduce((sum, r) => sum + (+r.respostas || 0), 0);
     const totalDestravar = wppLeadsRows.reduce((sum, r) => sum + (+r.destravar_objecao || 0), 0);
     const totalNecessita = wppLeadsRows.reduce((sum, r) => sum + (+r.necessita_atencao || 0), 0);
     spec = [
-      {label:'Inscritos',                       val: totalInscritos > 0 ? fmtInt(totalInscritos) : '—'},
-      {label:'Disparos (leads criados)',         val: totalDisparos > 0 ? fmtInt(totalDisparos) : '—'},
-      {label:'Cobertura (Disp./Insc.)',          val: totalInscritos > 0 && totalDisparos > 0 ? fmtPct1(safe(totalDisparos, totalInscritos)) : '—'},
-      {label:'Respostas',                        val: fmtInt(totalRespostas)},
-      {label:'Taxa de Resposta',                 val: totalDisparos > 0 ? fmtPct1(safe(totalRespostas, totalDisparos)) : '—'},
-      {label:'Destravar Objeção',                val: fmtInt(totalDestravar)},
-      {label:'Necessita Atenção',                val: fmtInt(totalNecessita)},
-      {label:'Retenção da IA',                   val: totalRespostas > 0 ? fmtPct1(safe(totalRespostas - totalNecessita, totalRespostas)) : '—'},
-      {label:'Conversão Resposta → Venda',       val: totalRespostas > 0 ? fmtPct1(safe(s.purchases, totalRespostas)) : '—'},
-      {label:'Receita / Inscrito',               val: totalInscritos > 0 ? fmtBRL2(safe(s.rev, totalInscritos)) : '—'},
-      {label:'Receita / Disparo',                val: totalDisparos > 0 ? fmtBRL2(safe(s.rev, totalDisparos)) : '—'},
+      {label:'Disparos (leads criados)',   val: totalDisparos > 0 ? fmtInt(totalDisparos) : '—'},
+      {label:'Respostas',                  val: fmtInt(totalRespostas)},
+      {label:'Taxa de Resposta',           val: totalDisparos > 0 ? fmtPct1(safe(totalRespostas, totalDisparos)) : '—'},
+      {label:'Destravar Objeção',          val: fmtInt(totalDestravar)},
+      {label:'Necessita Atenção',          val: fmtInt(totalNecessita)},
+      {label:'Retenção da IA',             val: totalRespostas > 0 ? fmtPct1(safe(totalRespostas - totalNecessita, totalRespostas)) : '—'},
+      {label:'Conversão Resposta → Venda', val: totalRespostas > 0 ? fmtPct1(safe(s.purchases, totalRespostas)) : '—'},
+      {label:'Receita / Disparo',          val: totalDisparos > 0 ? fmtBRL2(safe(s.rev, totalDisparos)) : '—'},
     ];
   } else {
     // WPP Campanha — mock (sem integração Vekta ainda)
@@ -2350,7 +2350,7 @@ async function renderChannel(key){
     renderCommunityMessageRanking(key, communityMsgRows);
   } else if(key === 'wf') {
     // WPP Fluxo — dados reais do banco
-    renderWppFlowTable(key, wppInscritosByFlow, wppLeadsRows, ch.color);
+    renderWppFlowTable(key, wppLeadsRows, ch.color);
     renderWppFlowUnknown(wppUnknownRows);
   } else if(!isEmail){
     // WPP Campanha — mock (Vekta sem integração)
@@ -2380,72 +2380,71 @@ async function renderChannel(key){
   }
 }
 
-function renderWppFlowTable(key, inscritosByFlow, leadsRows, color) {
-  const inscMap = {};
-  for (const r of inscritosByFlow) inscMap[r.flow_name] = +r.total_inscritos || 0;
-
+function renderWppFlowTable(key, leadsRows, color) {
   const leadsMap = {};
   for (const r of leadsRows) {
-    if (!leadsMap[r.flow_name]) leadsMap[r.flow_name] = {respostas:0, destravar_objecao:0, necessita_atencao:0};
+    if (!leadsMap[r.flow_name]) leadsMap[r.flow_name] = {disparos:0, respostas:0, destravar_objecao:0, necessita_atencao:0};
+    leadsMap[r.flow_name].disparos          += +r.total_leads || 0;
     leadsMap[r.flow_name].respostas         += +r.respostas || 0;
     leadsMap[r.flow_name].destravar_objecao += +r.destravar_objecao || 0;
     leadsMap[r.flow_name].necessita_atencao += +r.necessita_atencao || 0;
   }
 
-  const allFlows = [...new Set([...Object.keys(inscMap), ...Object.keys(leadsMap)])].sort();
+  const allFlows = Object.keys(leadsMap).sort();
 
   if (allFlows.length === 0) {
     document.getElementById('table-asset-' + key).innerHTML =
       '<tr><td colspan="5" style="color:var(--muted);padding:16px;text-align:center">Sem dados no período.</td></tr>';
   } else {
     const rows = allFlows.map(f => ({
-      name: f,
-      inscritos: inscMap[f] || 0,
-      respostas: leadsMap[f]?.respostas || 0,
-      destravar: leadsMap[f]?.destravar_objecao || 0,
-      necessita: leadsMap[f]?.necessita_atencao || 0,
+      name:     f,
+      disparos: leadsMap[f].disparos,
+      respostas: leadsMap[f].respostas,
+      destravar: leadsMap[f].destravar_objecao,
+      necessita: leadsMap[f].necessita_atencao,
     }));
     document.getElementById('table-asset-' + key).innerHTML = `
       <thead><tr>
         <th>Fluxo</th>
-        <th style="text-align:right">Inscritos</th>
+        <th style="text-align:right">Disparos</th>
         <th style="text-align:right">Respostas</th>
         <th style="text-align:right">Destravar Objeção</th>
         <th style="text-align:right">Necessita Atenção</th>
       </tr></thead>
       <tbody>${rows.map(r => `<tr>
         <td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:6px"></span>${r.name}</td>
-        <td style="text-align:right">${r.inscritos > 0 ? fmtInt(r.inscritos) : '—'}</td>
+        <td style="text-align:right">${r.disparos > 0 ? fmtInt(r.disparos) : '—'}</td>
         <td style="text-align:right">${fmtInt(r.respostas)}</td>
         <td style="text-align:right">${fmtInt(r.destravar)}</td>
         <td style="text-align:right">${fmtInt(r.necessita)}</td>
       </tr>`).join('')}</tbody>`;
 
-    // Rankings: por Inscritos e por Respostas
-    const byInsc = [...rows].sort((a,b) => b.inscritos - a.inscritos);
+    const byDisp = [...rows].sort((a,b) => b.disparos - a.disparos);
     const byResp = [...rows].sort((a,b) => b.respostas - a.respostas);
-    const maxInsc = byInsc[0]?.inscritos || 1;
+    const byDest = [...rows].sort((a,b) => b.destravar - a.destravar);
+    const maxDisp = byDisp[0]?.disparos || 1;
     const maxResp = byResp[0]?.respostas || 1;
+    const maxDest = byDest[0]?.destravar || 1;
 
-    const bestEl = document.getElementById('rank-best-' + key);
-    const worstEl = document.getElementById('rank-worst-' + key);
+    const bestEl    = document.getElementById('rank-best-' + key);
+    const worstEl   = document.getElementById('rank-worst-' + key);
     const bestEffEl = document.getElementById('rank-best-eff-' + key);
     const worstEffEl = document.getElementById('rank-worst-eff-' + key);
 
     if (bestEl) {
-      bestEl.innerHTML = byInsc.slice(0,5).map((r,i) => rankRow(i+1, r.name, fmtInt(r.inscritos), r.inscritos/maxInsc, color)).join('');
-      bestEl.closest('.card')?.querySelector('.card-title') && (bestEl.closest('.card').querySelector('.card-title').textContent = 'Top 5 · por Inscritos');
+      bestEl.innerHTML = byDisp.slice(0,5).map((r,i) => rankRow(i+1, r.name, fmtInt(r.disparos), r.disparos/maxDisp, color)).join('');
+      const t = bestEl.closest('.card')?.querySelector('.card-title');
+      if (t) t.textContent = 'Top 5 · por Disparos';
     }
     if (worstEl) {
       worstEl.innerHTML = byResp.slice(0,5).map((r,i) => rankRow(i+1, r.name, fmtInt(r.respostas), r.respostas/maxResp, color)).join('');
-      worstEl.closest('.card')?.querySelector('.card-title') && (worstEl.closest('.card').querySelector('.card-title').textContent = 'Top 5 · por Respostas');
+      const t = worstEl.closest('.card')?.querySelector('.card-title');
+      if (t) t.textContent = 'Top 5 · por Respostas';
     }
     if (bestEffEl) {
-      bestEffEl.innerHTML = byInsc.slice(0,5).map((r,i) => rankRow(i+1, r.name, fmtInt(r.inscritos), r.inscritos/maxInsc, color)).join('');
-      bestEffEl.closest('.card')?.querySelector('.card-title') && (bestEffEl.closest('.card').querySelector('.card-title').textContent = 'Top 5 · por Destravar Objeção');
-      const byDest = [...rows].sort((a,b) => b.destravar - a.destravar);
-      const maxDest = byDest[0]?.destravar || 1;
       bestEffEl.innerHTML = byDest.slice(0,5).map((r,i) => rankRow(i+1, r.name, fmtInt(r.destravar), r.destravar/maxDest, color)).join('');
+      const t = bestEffEl.closest('.card')?.querySelector('.card-title');
+      if (t) t.textContent = 'Top 5 · por Destravar Objeção';
     }
     if (worstEffEl?.closest('.card')) worstEffEl.closest('.card').style.display = 'none';
   }
