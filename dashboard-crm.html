@@ -1663,9 +1663,7 @@ function _drawResumo() {
 
   // — Funil CRM —
   renderFunnel('funnel-crm',{sessions:total.sessions,atc:total.add_to_cart,bco:total.begin_checkout,purchases:total.orders});
-  renderGauge('chart-gauge',0);
-  document.getElementById('projection').textContent  = fmtBRLfull(total.revenue_brl);
-  document.getElementById('pace-status').innerHTML   = '<span class="tag blue">Metas disponíveis em breve</span>';
+  _renderPaceCard();
 
   // — Saúde da Base (mock) —
   document.getElementById('health-email').innerHTML = renderHealth([
@@ -4056,17 +4054,21 @@ async function saveMetas() {
 async function fetchAndRenderMetas() {
   const now   = new Date();
   const month = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
-  const { data } = await supabase
-    .from('fact_monthly_goals').select('*').eq('month', month).maybeSingle();
-  window._metasData = data || null;
-  window._channelGoals = data ? {
-    ef: parseFloat(data.goal_email_flow_brl)     || 0,
-    ec: parseFloat(data.goal_email_campaign_brl) || 0,
-    wf: parseFloat(data.goal_wpp_flow_brl)       || 0,
-    wc: parseFloat(data.goal_wpp_campaign_brl)   || 0,
-    co: parseFloat(data.goal_community_brl)      || 0,
+  const [goalsResp, paceResp] = await Promise.all([
+    supabase.from('fact_monthly_goals').select('*').eq('month', month).maybeSingle(),
+    supabase.from('vw_pace_vs_goals').select('*').eq('month', month).maybeSingle(),
+  ]);
+  window._metasData  = goalsResp.data || null;
+  window._paceData   = paceResp.data  || null;
+  window._channelGoals = goalsResp.data ? {
+    ef: parseFloat(goalsResp.data.goal_email_flow_brl)     || 0,
+    ec: parseFloat(goalsResp.data.goal_email_campaign_brl) || 0,
+    wf: parseFloat(goalsResp.data.goal_wpp_flow_brl)       || 0,
+    wc: parseFloat(goalsResp.data.goal_wpp_campaign_brl)   || 0,
+    co: parseFloat(goalsResp.data.goal_community_brl)      || 0,
   } : {};
   _renderMetaTotalCard(window._revAtribMTD || 0);
+  _renderPaceCard();
 }
 
 function _renderMetaTotalCard(revAtrib) {
@@ -4080,6 +4082,29 @@ function _renderMetaTotalCard(revAtrib) {
     document.getElementById('pct-total').textContent  = '—';
     document.getElementById('bar-total').style.width  = '0%';
   }
+}
+
+function _renderPaceCard() {
+  const pace = window._paceData;
+  if (!pace || !pace.goal_total_brl) {
+    renderGauge('chart-gauge', 0);
+    document.getElementById('projection').textContent = '—';
+    document.getElementById('pace-status').innerHTML  = '<span class="tag">Configure uma meta para ver o pace</span>';
+    return;
+  }
+  const pct        = parseFloat(pace.pct_achieved) / 100;
+  const revToDate  = parseFloat(pace.revenue_to_date)  || 0;
+  const daysElap   = parseInt(pace.days_elapsed)        || 1;
+  const daysTotal  = parseInt(pace.days_in_month)       || 30;
+  const projected  = (revToDate / daysElap) * daysTotal;
+  renderGauge('chart-gauge', pct);
+  document.getElementById('projection').textContent = fmtBRLfull(projected);
+  const statusMap = {
+    achieved: '<span class="tag green">✅ Meta atingida</span>',
+    on_track: '<span class="tag blue">📈 No ritmo</span>',
+    behind:   '<span style="color:#dc2626;font-weight:600">⚠️ Abaixo do ritmo</span>',
+  };
+  document.getElementById('pace-status').innerHTML = statusMap[pace.status] || pace.status;
 }
 
 // =========================================
