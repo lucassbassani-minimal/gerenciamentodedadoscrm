@@ -31,18 +31,32 @@ def _get_worksheet() -> gspread.Worksheet:
     return gc.open_by_key(spreadsheet_id).get_worksheet(0)
 
 
+BATCH_SIZE = 1000
+
+
+def _fetch_all_leads(sb) -> list:
+    all_rows: list = []
+    offset = 0
+    while True:
+        resp = (
+            sb.table("leads_webhook")
+            .select("data,telefone,origem,funil,nome_do_vendedor")
+            .gte("data", CUTOFF_DATE)
+            .order("data", desc=False)
+            .range(offset, offset + BATCH_SIZE - 1)
+            .execute()
+        )
+        batch = resp.data or []
+        all_rows.extend(batch)
+        if len(batch) < BATCH_SIZE:
+            break
+        offset += BATCH_SIZE
+    return all_rows
+
+
 def export_leads_to_sheets() -> int:
     sb = get_supabase_client()
-
-    resp = (
-        sb.table("leads_webhook")
-        .select("data,telefone,origem,funil,nome_do_vendedor")
-        .gte("data", CUTOFF_DATE)
-        .order("data", desc=True)
-        .limit(10000)
-        .execute()
-    )
-    rows = resp.data or []
+    rows = _fetch_all_leads(sb)
 
     values = [HEADERS] + [
         [
