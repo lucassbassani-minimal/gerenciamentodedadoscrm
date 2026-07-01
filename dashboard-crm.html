@@ -214,6 +214,9 @@ tr.nested td:first-child{padding-left:36px;color:var(--muted)}
 .cal-day:hover .cal-add-btn{opacity:1}
 .cal-add-btn:hover{transform:scale(1.15);background:#1e40af}
 .cal-event.campaign{font-size:10.5px;padding:3px 7px}
+.cal-day-total{position:absolute;top:4px;left:6px;background:var(--text);color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;line-height:1.5;white-space:nowrap;z-index:1}
+.cal-month-total{font-size:11px;color:var(--text);font-weight:600;background:#eef2ff;padding:4px 10px;border-radius:6px;white-space:nowrap}
+.cal-month-total strong{color:var(--primary)}
 .multi-select-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:5px}
 .multi-select-grid.times{grid-template-columns:repeat(4,1fr)}
 .multi-select-item{display:flex;align-items:center;gap:6px;padding:7px 10px;background:#fff;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;transition:.12s;user-select:none}
@@ -3417,7 +3420,10 @@ function renderCalendar(key){
         <button onclick="moveMonth('${key}',1)">›</button>
         <button class="btn btn-ghost btn-sm" onclick="goToday('${key}')" style="margin-left:8px">Hoje</button>
       </div>
-      ${st.isCampaign?`<div style="font-size:11px;color:var(--muted)">Cor por: ${st.campaignKind==='campaign-ec'?'Modelo do e-mail':'Tipo de base'}</div>`:`<div class="cal-color-toggle"><span>Cor por:</span>
+      ${st.isCampaign?`<div style="display:flex;align-items:center;gap:14px">
+        ${st.campaignKind==='campaign-wc'?`<div class="cal-month-total" id="month-total-${key}">Total do mês: <strong>—</strong></div>`:''}
+        <div style="font-size:11px;color:var(--muted)">Cor por: ${st.campaignKind==='campaign-ec'?'Modelo do e-mail':'Tipo de base'}</div>
+      </div>`:`<div class="cal-color-toggle"><span>Cor por:</span>
         <button class="${st.color==='type'?'active':''}" onclick="setColor('${key}','type')">Tipo</button>
         <button class="${st.color==='status'?'active':''}" onclick="setColor('${key}','status')">Status</button>
         <button class="${st.color==='result'?'active':''}" onclick="setColor('${key}','result')">Resultado</button>
@@ -3441,6 +3447,11 @@ function drawCalendar(key){
   grid.innerHTML=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d=>`<div class="cal-dow">${d}</div>`).join('');
   const events=logData.filter(d=>st.filter.kindOnly?d.kind===st.filter.kindOnly:true);
   const today=logTodayISO();
+  if(st.isCampaign&&st.campaignKind==='campaign-wc'){
+    const monthTotal=events.filter(e=>{const d=new Date(e.date+'T00:00:00');return d.getFullYear()===Y&&d.getMonth()===M;}).reduce((s,e)=>s+(e.quantity||0),0);
+    const totalEl=document.getElementById('month-total-'+key);
+    if(totalEl) totalEl.innerHTML=`Total do mês: <strong>${monthTotal.toLocaleString('pt-BR')}</strong> pessoas`;
+  }
   cells.forEach(c=>{
     const dayEv=events.filter(e=>{
       if(st.isCampaign) return e.date===c.date;
@@ -3454,6 +3465,14 @@ function drawCalendar(key){
       div.addEventListener('drop',e=>{e.preventDefault();div.classList.remove('drag-over');const id=e.dataTransfer.getData('text/id');logMoveEvent(id,c.date);});
     }
     div.innerHTML=`<span class="cal-day-num">${c.day}</span>`;
+    if(st.isCampaign&&st.campaignKind==='campaign-wc'&&dayEv.length){
+      const dayTotal=dayEv.reduce((s,e)=>s+(e.quantity||0),0);
+      if(dayTotal>0){
+        const tb=document.createElement('span'); tb.className='cal-day-total'; tb.title='Pessoas a receber neste dia';
+        tb.textContent='👥 '+dayTotal.toLocaleString('pt-BR');
+        div.appendChild(tb);
+      }
+    }
     if(st.isCampaign&&!c.otherMonth){
       const ab=document.createElement('button'); ab.className='cal-add-btn'; ab.textContent='+'; ab.title='Nova campanha neste dia';
       ab.onclick=(e)=>{e.stopPropagation();openLogCampaignPanel('create',st.campaignKind,null,c.date);}; div.appendChild(ab);
