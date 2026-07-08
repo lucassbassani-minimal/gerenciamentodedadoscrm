@@ -26,6 +26,10 @@ venv/
 .supabase/
 supabase/.temp/
 
+# Exports manuais de dados brutos (backfills) — não versionar
+Todos os pedidos Minimal/
+Jornada do Cliente/Base de Touchpoints.csv
+
 # Claude Code — configurações locais com credenciais
 .claude/settings.local.json
 

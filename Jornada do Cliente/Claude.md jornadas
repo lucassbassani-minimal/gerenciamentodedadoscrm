@@ -1,0 +1,385 @@
+Análise de Atribuição de Reativação (Efeito Plinko) — explicado sem jargão
+
+
+Este documento é o blueprint pra construir essa análise do zero, a partir da base de touchpoints que você já
+tem (orders_raw) cruzada com os eventos de e-mail do Klaviyo (abertura, clique, visita ao site). A ideia é
+poder refazer isso em qualquer período sem precisar reconstruir o raciocínio.
+
+
+ATUALIZAÇÃO DE ESCOPO (08/07/2026) — leia antes do resto do documento
+
+Ao avaliar a "Base de Touchpoints.csv" real (128.912 linhas) contra o que este documento pedia, apareceram
+3 limitações estruturais da base atual:
+
+1. Ela só tem pedido pago (financial_status = PAID em 100% das linhas) — é o cenário (a) da Seção 3.2:
+   dá pra medir tempo até compra de quem já converteu, não dá pra calcular taxa de conversão da régua
+   (falta o denominador de quem teve o toque e não comprou).
+2. Cada pedido carrega só os touchpoints dos últimos 30 dias antes da compra — não é um log de eventos
+   contínuo. Um toque de reativação que aconteceu 45+ dias antes da compra não aparece nessa base.
+3. Não existe hoje, na ingestão, abertura/clique do Klaviyo por cliente com timestamp — só agregado por
+   mensagem/dia (`ingestion/sources/klaviyo.py`). Ou seja, os eventos "abertura"/"clique" da Seção 3.3
+   não existem ainda em lugar nenhum, nem pra Fase 1 nem pra Fase 2.
+
+Decisão tomada com o Daniel: como é uma análise inicial, a Fase 1 roda com o que já existe, sem o filtro
+de "cliente frio" (90/180/365 dias de inatividade — Seção 3.3) e sem cruzar com histórico completo de
+pedidos. A régua vira: "entre os pedidos pagos dos últimos ~2 meses, quando um toque de Email Fluxo/Campanha
+aparece no meio do caminho (não é o último toque antes da compra), quantos dias depois a compra acontece e
+quais outros canais aparecem entre esse toque e a venda" — mesma lógica da cascata, só que sem o pré-requisito
+de o cliente estar "frio" antes do toque. Ver Seção 11 pra onde isso evolui.
+
+O modelo completo do documento original (Seções 4-5 com o filtro de cliente frio, taxa de conversão da régua)
+fica de pé como o alvo da Fase 2, quando o projeto de extração de eventos do Klaviyo (Seção 11) existir.
+
+
+1. Qual pergunta essa análise responde
+
+Hoje, quando um e-mail de reativação é disparado pra base fria (cliente que não compra/interage há 6, 12, 24
+meses), a régua normalmente é avaliada só pela receita atribuída direto àquele e-mail (last-click no Klaviyo).
+Isso subestima o efeito real, porque o e-mail de reativação raramente é quem fecha a venda — ele é quem
+acorda o cliente.
+
+Essa análise existe pra responder:
+
+
+Quando um cliente frio tem um toque real (abriu e-mail, clicou, ou entrou no site) depois de muito tempo
+sem interação, quantos dias depois, em média, ele compra?
+Esse tempo de resposta é parecido o suficiente entre clientes pra virar uma regra (janela de atribuição)?
+Ou seja: dá pra dizer "se teve um toque de reativação, atribui a venda a ele se a compra aconteceu dentro de
+X dias"?
+O efeito é mesmo em cascata (Plinko) — isto é, depois do toque de reativação, o cliente volta a aparecer
+em outros canais (fluxo de campanha, remarketing pago, etc.) antes de comprar — e não é só "abriu e comprou
+na hora"?
+
+
+Por que isso importa: se a régua de reativação só é julgada pelo que ela vende no last-click, ela sempre vai
+parecer "cara" ou "fraca" perto de fluxos transacionais (carrinho abandonado, por exemplo), porque o trabalho
+dela é reacender o pixel e o relacionamento, não fechar. Cortar a régua de reativação por isso é cortar a
+lenha que alimenta as outras fogueiras.
+
+
+2. A hipótese central: o Efeito Plinko
+
+A régua de reativação não age como um evento linear (e-mail → clique → compra). Ela age como o jogo Plinko: a
+ficha (o toque real do cliente) cai e vai batendo em pinos ao longo do caminho até o fundo (a compra), e cada
+pino é um mecanismo que se reativa:
+
+
+Pino 1 — Pixel de anúncios: o cookie/identificador do cliente é renovado ao visitar o site, e ele volta a
+entrar em audiências de retargeting (Meta, Google, TikTok).
+Pino 2 — Fluxos verticais de abandono: dependendo do que ele fizer no site, entra em Site Abandon, Browse
+Abandon ou Cart Abandon — os fluxos de maior conversão do e-mail marketing.
+Pino 3 — Sinal de entregabilidade: o clique é lido pelos provedores (Gmail/Yahoo) como sinal de que o
+domínio envia conteúdo desejado, o que ajuda a reputação de envio.
+Pino 4 — Reentrada em segmentos engajados: o cliente volta a fazer parte dos segmentos ativos (30/60 dias)
+e passa a receber os disparos normais de campanha.
+
+
+O que essa análise precisa provar, com dado, pra sustentar essa hipótese:
+
+
+Que existe um intervalo de tempo típico e mensurável entre "toque de reativação" e "compra" (não é
+instantâneo, mas também não é infinito).
+Que, entre o toque e a compra, o cliente normalmente passa por outros touchpoints (não compra direto do
+e-mail de reativação) — isso é a evidência da cascata.
+Que o volume de vendas capturado dentro dessa janela é maior do que o que o Klaviyo atribui via last-click
+puro à campanha de reativação.
+
+
+
+3. De onde vêm os dados
+
+3.1 orders_raw (já existe)
+
+Mesma base usada na análise de touchpoints: cada pedido pago tem uma linha por toque, com touchpoint_at,
+processed_at, UTMs, e a flag is_last_before_purchase. Filtro obrigatório: financial_status = 'PAID'.
+
+IMPORTANTE — origem e natureza do dado (confirmado com o Daniel em 08/07/2026): essa base vem do Shopify,
+não de um pixel/CDP de eventos brutos. A captura de UTM do Shopify é last-click por sessão — cada linha de
+touchpoint representa a sessão em que aquele clique/UTM foi o atribuído por último pelo Shopify naquela
+sessão, não todo micro-evento (impressão, hover, abertura) que o cliente teve. Ou seja: "múltiplos
+touchpoints por pedido" = múltiplas sessões distintas de entrada no site antes da compra, cada uma já
+"resolvida" pelo Shopify como last-click daquela sessão — não é um log de eventos por sessão. Isso não muda
+o modelo de cascata (ainda dá pra ver a sequência de canais/sessões até a compra), mas muda a interpretação:
+um "toque de e-mail" aqui significa "uma sessão cujo último clique atribuído pelo Shopify foi um link de
+e-mail", não "o cliente abriu ou clicou o e-mail" no sentido do evento do Klaviyo (isso só existe na Fase 2,
+Seção 11).
+
+3.2 Eventos disponíveis hoje: entrada no site a partir de e-mail/fluxo
+
+Importante — isso muda o desenho da Fase 1 da análise: hoje você ainda não tem Opened Email nem
+Clicked Email capturados. O que existe é a entrada no site atribuída a um e-mail ou fluxo (via UTM na base de
+touchpoints, o mesmo mecanismo já usado na análise de touchpoints — utm_source/utm_medium/utm_campaign
+apontando pra Email Fluxo ou Email Campanha).
+
+Isso significa que, na Fase 1, o "toque de reativação" = uma linha em orders_raw cujo canal classificado é
+Email Fluxo ou Email Campanha, independente de ter virado pedido ou não. Só que aqui aparece uma diferença
+estrutural importante em relação à análise de touchpoints original: orders_raw, do jeito que foi descrita na
+Seção 2 do documento de touchpoints, só tem linha pra toques que fizeram parte de um pedido pago (a base
+inteira é ancorada em financial_status = 'PAID'). Ou seja, se o cliente clicou no e-mail, entrou no site, e
+não comprou nada depois, esse toque pode não existir em orders_raw — ele só existiria numa fonte de sessão
+de site (ex.: eventos de analytics/pixel, ou o evento de sessão do próprio Klaviyo, tipo Active on Site).
+
+Precisa confirmar antes de seguir: você precisa checar se a fonte de "entrada no site a partir do e-mail"
+que você tem é (a) só a que aparece em orders_raw (logo, só de quem comprou — o que não serve pra calcular
+taxa de conversão, porque todo mundo na amostra já converteu), ou (b) uma fonte separada de sessão/clique de
+todo mundo que entrou, comprando ou não (isso sim serve pro modelo completo). Se for só (a), a Fase 1 consegue
+calcular o tempo até compra de quem já comprou, mas não consegue calcular a taxa de conversão da régua
+(não dá pra saber o denominador de quem teve o toque e não comprou). Se você tiver (b), o modelo funciona
+completo desde já.
+
+Campos mínimos necessários desse evento de entrada no site, seja qual for a fonte:
+profile_id/e-mail do cliente, timestamp da entrada, utm_source/utm_medium/utm_campaign (pra
+identificar se veio de fluxo ou campanha, e qual).
+
+3.3 Fase 2 (futura): abertura e clique de e-mail
+
+Quando abertura (Opened Email) e clique (Clicked Email) do Klaviyo estiverem disponíveis, isso vira um
+segundo ponto da análise, rodado em paralelo ao da Seção 3.2, não em substituição. A razão de separar em
+duas fases:
+
+
+Entrada no site é o evento mais forte de intenção (o cliente efetivamente saiu do e-mail e foi pro
+site) — é o que já dá pra medir hoje, e sozinho já é suficiente pra montar a Fase 1 inteira deste documento
+(Seções 4 a 7).
+Abertura/clique vão permitir, na Fase 2, refinar o funil em três camadas em vez de duas:
+abriu → clicou → entrou no site → comprou, o que deixa mais preciso identificar em qual etapa o cliente frio
+está "esfriando" de novo (abre mas não clica; clica mas não entra; entra mas não compra).
+Também vai permitir tratar separadamente o problema de confiabilidade de abertura (Apple MPP infla aberturas
+automaticamente — ver Seção 8.4), calculando a janela de atribuição com e sem esse ruído.
+
+
+Quando a Fase 2 entrar, a Seção 5 (janela de atribuição) deve ser recalculada separando as distribuições por
+tipo de evento (abertura vs. clique vs. entrada no site), porque cada um tende a ter uma janela de resposta
+diferente — clique/entrada tendem a converter mais rápido que abertura pura.
+
+3.3 Definição de "cliente frio" (pré-requisito pro toque contar como reativação)
+
+Antes de qualquer toque contar como "toque de reativação", o cliente precisa estar classificado como frio no
+momento daquele toque. Sugestão de regra (ajustável): sem nenhuma compra E sem nenhum clique/abertura
+registrado nos últimos N dias (ex.: 90, 180 ou 365 — testar mais de um corte). Isso evita contar como
+"reativação" um clique de um cliente que já estava quentinho e ia comprar de qualquer jeito.
+
+
+3.4 Como classificar os touchpoints (confirmado com o Daniel em 08/07/2026)
+
+A Base de Touchpoints é da Shopify e é last-click por sessão (ver Seção 3.1) — não distingue e-mail de
+WhatsApp por si só, só carrega o UTM cru da sessão. Pra classificar cada touchpoint num canal, a análise
+usa as regras abaixo, tiradas do valor real de utm_medium observado na base (não da tabela dim_utm_mappings
+do banco, que hoje só tem os 5 valores "idealizados" de semente — email/flow, email/campaign, etc. — e não
+bate com o que chega de verdade nas UTMs, o mesmo problema estrutural registrado na feature UTM Mapping):
+
+utm_medium (case-insensitive) → canalE-mail Fluxoemail_fluxo, fluxos_crmE-mail Campanhaemail_campanhaWhatsApp Fluxowhatsapp_fluxo, whatsapp_fluxo_iaWhatsApp Campanhawhatsapp_campanhaWhatsApp Comunidadecomunidade
+
+A análise roda em 3 níveis de granularidade, do mais amplo pro mais fino, sempre olhando o mesmo tipo de
+toque (utm_medium acima) em qualquer posição da jornada, não só o último antes da compra:
+
+1. Canal completo: E-mail (email_fluxo + email_campanha) vs. WhatsApp (whatsapp_fluxo + whatsapp_campanha
+   + comunidade) — a visão mais agregada da cascata.
+2. Os 5 canais oficiais separados: E-mail Fluxo, E-mail Campanha, WhatsApp Fluxo, WhatsApp Campanha,
+   WhatsApp Comunidade — mesma métrica, quebrada por canal.
+3. Fluxo individual (só dentro de E-mail Fluxo e WhatsApp Fluxo — campanha e comunidade não têm essa
+   subdivisão porque já são unidades nomeadas por si só no Klaviyo/Vekta): usa utm_campaign pra identificar
+   qual fluxo, cruzando com a referência de nomes de cada canal:
+   - E-mail Fluxo → planilha `configurações de utm.xlsx` (raiz do projeto), coluna "Nome do Fluxo" ×
+     campaign/term/content. Tem 37 fluxos cadastrados hoje.
+   - WhatsApp Fluxo → tabelas `dim_wpp_origem_mapping` e `dim_wpp_alia_campanha_mapping` no Supabase
+     (projeto `gerenciamentodedadoscrm`, aczvusdzfrmborvvfqib), que traduzem utm_campaign → flow_name.
+
+ATENÇÃO — inconsistências encontradas ao cruzar essas referências com a Base de Touchpoints real, que a
+análise precisa reportar em vez de esconder (nunca bucketizar como "outro" silenciosamente, no espírito da
+R8): (a) vários utm_campaign que aparecem nos touchpoints reais de e-mail (ex.: cartstack, perpetuo,
+clientes60D, upsell_sorteiocopa, fluxo_desengajamento, blackfriday2025, welcome_geral) não existem na
+planilha de 37 fluxos — ela está desatualizada em relação ao que roda de verdade; (b) tem divergência de
+grafia entre o que a tabela `dim_wpp_alia_campanha_mapping` espera (ex.: utm_campaign = fluxo_pageview, com
+underscore, e aquisição, para os fluxos de pageview 30-60d/60-90d/etc.) e o que chega de fato no pedido
+(ex.: utm_campaign = fluxo-pageview, com hífen, e pageview-30-60d, pageview-60-90d direto, sem passar por
+"aquisição"). A análise deve reportar todo utm_campaign de fluxo que não bate com nenhuma referência como
+"não mapeado" (com a contagem), em vez de descartar — isso também é um achado (config desatualizada tanto
+no lado e-mail quanto WhatsApp).
+
+
+4. O modelo: tempo até conversão
+
+NOTA (Fase 1 real, ver Atualização de Escopo no topo): o gate de "cliente frio" descrito abaixo é o alvo
+da Fase 2. Na Fase 1 como está sendo construída agora, o evento qualificado é qualquer touchpoint cujo
+utm_medium bata com um dos 5 canais de CRM da Seção 3.4 (email_fluxo, email_campanha, whatsapp_fluxo,
+whatsapp_campanha, comunidade) e que não seja is_last_before_purchase = true dentro do próprio pedido — não
+existe verificação de inatividade prévia, porque a base não tem histórico suficiente pra isso. A análise
+roda nos 3 níveis de granularidade da Seção 3.4 (canal completo, 5 canais, fluxo individual).
+
+4.1 A unidade de análise
+
+Para cada cliente frio que teve um evento qualificado (Fase 1: entrou no site vindo de um e-mail/fluxo; Fase 2,
+quando disponível: abriu ou clicou um e-mail) depois do período de inatividade, calcular:
+
+dias_ate_compra = data_da_proxima_compra − data_do_evento_de_reativacao
+
+
+data_do_evento_de_reativacao = timestamp do primeiro evento (abertura/clique) depois do corte de
+inatividade.
+data_da_proxima_compra = processed_at do primeiro pedido pago desse cliente depois desse evento.
+Se o cliente não comprou dentro de uma janela de observação razoável (ex.: 90 dias depois do evento),
+ele entra como "não convertido" — não descartar, ele importa pro cálculo de taxa de conversão da régua.
+
+
+4.2 O que a tabela de resultado precisa ter, por cliente
+
+campodescriçãocustomer_ididentificador do clientedata_evento_reativacaoquando ele abriu/clicou depois de estar friotipo_eventoFase 1: entrada no site (via e-mail/fluxo). Fase 2 (quando disponível): abertura ou cliquecampanha_ou_fluxonome da campanha/fluxo que gerou o eventodias_desde_ultima_interacaohá quanto tempo estava frio antes desse eventoconverteusim/não, dentro da janela de observaçãodias_ate_comprase converteu, quantos dias depoispedido_idpedido gerado, se houvercanal_que_fechouqual canal aparece como is_last_before_purchase = TRUE nesse pedido (pra provar queraramente é o próprio e-mail de reativação)qtd_touchpoints_entre_evento_e_compraquantos outros toques (de qualquer canal) aconteceram entre oevento de reativação e a compra — essa é a métrica-chave da cascata
+
+
+5. Como definir a janela de atribuição
+
+Com a tabela acima montada (só as linhas converteu = sim), calcular a distribuição de dias_ate_compra:
+
+
+Média e mediana — a mediana importa mais aqui, porque outliers (cliente que reativa e some, some, e compra
+8 meses depois) puxam a média pra cima artificialmente.
+Percentis 50/80/90 — essa é a parte que decide a janela prática:
+
+P50 = "metade dos clientes reativados compra em até X dias."
+P80 = "80% dos clientes reativados compra em até Y dias." Esse é o corte mais defensável pra virar regra
+de atribuição, porque captura a maioria sem esticar demais pra outliers.
+P90 opcional, só pra referência de quanto se perde/ganha esticando mais.
+
+
+
+Comparar por tipo de evento: na Fase 1, o único tipo de evento disponível é "entrada no site" — então essa
+quebra ainda não se aplica. Na Fase 2, quando abertura e clique entrarem, vale calcular os percentis separado
+por tipo_evento, porque clique tende a converter mais rápido que abertura pura (intenção mais forte).
+Comparar por tempo de inatividade: um cliente frio há 90 dias pode reagir diferente de um frio há 365 —
+vale segmentar a distribuição por faixa de dias_desde_ultima_interacao pra ver se a janela muda.
+
+
+A regra final normalmente é algo como: "se um cliente frio (>= N dias sem interação) teve um clique/abertura
+de e-mail, atribuir a próxima compra dele a esse evento de reativação, desde que aconteça dentro de P80 dias."
+
+
+6. Como provar o Efeito Plinko com dado (não só com a analogia)
+
+Três evidências, usando a mesma tabela:
+
+
+Distribuição de qtd_touchpoints_entre_evento_e_compra: se a maioria dos casos convertidos tem 0 outros
+toques no meio, o efeito Plinko não existe — a venda é direta. Se a maioria tem 1+ toques no meio, é a prova
+da cascata.
+Distribuição de canal_que_fechou: mostrar que a maior parte das vendas atribuídas à reativação foi
+fechada por outro canal (WhatsApp Fluxo, Direto, Campanha) e não pelo próprio e-mail de reativação. Isso é
+o equivalente à Aba 1 da análise de touchpoints ("Meta assiste outros canais"), só que aplicada à régua de
+reativação em vez do Meta.
+Receita atribuída (modelo de reativação) vs. receita atribuída (last-click puro do Klaviyo): somar o
+valor dos pedidos capturados pela regra da Seção 5 e comparar com o que o Klaviyo reporta como receita direta
+da campanha/fluxo de reativação. A diferença entre os dois números é, na prática, o tamanho do efeito Plinko
+em R$.
+
+
+
+7. Abas/outputs sugeridos pra essa análise (mesmo formato da análise de touchpoints)
+
+AbaConteúdo1 — Tempo até conversãoDistribuição (histograma) de dias_ate_compra, com média, mediana, P50/P80/P90 — geral e por tipo de evento2 — Janela por tempo de inatividadeMesma distribuição, segmentada por faixa de dias_desde_ultima_interacao3 — Cascata (assists)Distribuição de qtd_touchpoints_entre_evento_e_compra e lista de quais canais/campanhas aparecem nesse meio-caminho4 — Quem fechaDistribuição de canal_que_fechou, mostrando que raramente é o próprio e-mail de reativação5 — Receita: modelo novo vs. last-clickComparativo de R$ atribuído pela regra de reativação vs. R$ que o Klaviyo mostra hoje6 — Taxa de conversão da régua% de clientes frios que tiveram um evento de reativação e converteram dentro da janela definida, vs. % que não converteu
+
+
+8. Pegadinhas de dado (pra não repetir erro)
+
+
+Data do evento ≠ data da compra. No Klaviyo, o timestamp do evento de abertura/clique é a hora real do
+evento — diferente do orders_raw, onde (como documentado na análise de touchpoints) processed_at é a hora
+da compra repetida em todas as linhas do pedido, e a hora real de cada toque fica em touchpoint_at. Não
+misturar as duas fontes sem confirmar qual coluna é qual em cada uma.
+"Cliente frio" precisa ser calculado no momento do evento, não hoje. Se você rodar essa análise em julho
+olhando maio, o corte de inatividade tem que ser calculado com base no que o cliente tinha feito até
+aquele momento de maio, não com o status dele hoje.
+Um cliente pode ter vários eventos de reativação no mesmo período de frieza (abriu 3 e-mails seguidos
+antes de comprar). Definir explicitamente: conta o primeiro evento depois do corte de inatividade, ou
+o evento mais próximo da compra? Isso muda o resultado — recomendo usar o primeiro, porque é o que
+efetivamente "soltou a ficha".
+Abertura de e-mail (quando entrar na Fase 2) tem problema de confiabilidade (Apple MPP infla aberturas
+automaticamente sem o cliente realmente ter aberto). Isso não afeta a Fase 1 — entrada no site é, por
+natureza, um evento real (o cliente de fato clicou e chegou lá). Mas quando abertura entrar como evento
+qualificado, ela deve ser tratada com desconfiança e, se possível, sempre priorizar clique sobre abertura
+pura como "toque real".
+Comparação com != contra coluna que pode ser nula descarta nulos silenciosamente em SQL — usar
+IS DISTINCT FROM sempre que uma coluna (ex.: campaign_id) pode vir vazia.
+A Base de Touchpoints é last-click por sessão (dado nativo do Shopify — ver Seção 3.1), não um log de
+eventos de e-mail. Não tratar um "toque de Email Fluxo/Campanha" nessa base como sinônimo de "abriu" ou
+"clicou" o e-mail no sentido do Klaviyo — é "a sessão de entrada no site cujo último clique atribuído foi
+um link de e-mail". Essa distinção só deixa de importar quando a Fase 2 (Seção 11) trouxer os eventos
+reais de Opened/Clicked Email do Klaviyo.
+
+
+
+9. Plano técnico de implementação (Fase 1 — o que dá pra construir agora)
+
+1. Carregar "Base de Touchpoints.csv" com Python puro (csv + datetime, sem pandas — proibido pelo
+   CLAUDE.md), já filtrando financial_status = PAID (é 100% da base hoje, mas manter o filtro explícito
+   pra não quebrar se a exportação mudar).
+2. Para cada pedido, identificar touchpoints qualificados: utm_medium in (email_fluxo, fluxos_crm,
+   email_campanha, whatsapp_fluxo, whatsapp_fluxo_ia, whatsapp_campanha, comunidade) e
+   is_last_before_purchase = false. Esse é o "toque de reativação" desta fase (sem gate de inatividade —
+   ver nota da Seção 4), classificado nos 3 níveis da Seção 3.4 (canal completo, 5 canais, fluxo individual
+   via utm_campaign + planilha/tabelas de referência — reportando "não mapeado" quando não bater com
+   nenhuma referência).
+3. Para cada toque qualificado, calcular dias_ate_compra = processed_at (data/hora da compra) −
+   touchpoint_at (data/hora do próprio toque) — os dois campos já existem na base, não precisa de nenhuma
+   outra fonte. Contar quantos outros touchpoints existem entre esse toque e is_last_before_purchase = true
+   no mesmo pedido (qtd_touchpoints_entre_evento_e_compra), e qual canal é o is_last_before_purchase = true
+   (canal_que_fechou).
+4. Montar a tabela de resultado (mesmas colunas da Seção 4.2, exceto data_evento_reativacao/
+   dias_desde_ultima_interacao que dependem do gate de inatividade — ficam de fora nesta fase).
+5. Calcular as distribuições e percentis (Seção 5, sem a quebra por tipo_evento — só tem "entrada no site"
+   nesta fase) e montar o HTML final com as abas aplicáveis da Seção 7 (1, 3, 4, 5 — as abas 2 e 6
+   dependem do gate de inatividade/conversão, ficam pra Fase 2).
+6. Publicar como artifact (mesmo formato usado nas análises de Recompra & LTV), documentar os achados em
+   docs/sessions/, e decidir com o Daniel se algum resultado já é acionável antes da Fase 2 existir.
+
+RESULTADO (entregue em 08/07/2026): script `analise_plinko.py` (nesta pasta) processa a Base de
+Touchpoints e gera `dados_dashboard.json`, consumido pelo artifact publicado (ver
+docs/sessions/2026-07-08-jornada-cliente-plinko-fase1.md para o resumo dos achados e o link).
+Achado central: só 30,8% dos pedidos tocados por e-mail no meio do caminho fecham pelo próprio e-mail
+(34,9% no WhatsApp) — a maior fatia fecha por "Outro" (ads/direto/orgânico), evidência a favor do efeito
+Plinko já na Fase 1, mesmo sem o gate de cliente frio.
+
+
+
+10. O que fica provado (ou refutado) no final
+
+Se os dados confirmarem a hipótese, você vai conseguir mostrar, com número:
+
+
+"Um clique de reativação normalmente vira compra dentro de X dias (P80)."
+"Em Y% dos casos, a venda foi fechada por outro canal, não pelo próprio e-mail de reativação."
+"A régua de reativação gera R$ Z a mais de receita do que o Klaviyo mostra no last-click direto."
+
+
+Se os dados não confirmarem (ex.: pouquíssimos toques têm outros touchpoints no meio, ou a distribuição de
+tempo é caótica sem percentil claro), isso também é um resultado válido — significa que o efeito Plinko é mais
+fraco do que a hipótese, e a régua de reativação deve ser avaliada de outro jeito.
+
+
+11. Próximos passos — Fase 2: projeto de extração de eventos do Klaviyo
+
+Combinado com o Daniel em 08/07/2026: depois da Fase 1 entregue, o próximo passo é um projeto novo e
+separado (não uma extensão do dashboard-crm.html nem do cron de 30 min existente) pra extrair do Klaviyo,
+por perfil e com timestamp:
+
+- Opened Email e Clicked Email (hoje só existem agregados por mensagem/dia em
+  ingestion/sources/klaviyo.py — via Metrics API — não por perfil).
+- Active on Site / visita ao site, se o Klaviyo expuser esse evento por perfil (verificar na API de Events).
+- Qualquer outro evento de perfil que ajude a identificar entrada/saída de "cliente frio" (ex.: última
+  compra, última interação de qualquer tipo).
+
+Isso é o que falta pra rodar o modelo completo do documento original (Seções 3.3, 4 e 5, com o gate de
+"cliente frio" de 90/180/365 dias e o cálculo de taxa de conversão da régua). Quando esse projeto existir,
+a Fase 1 não é descartada — ela é reaproveitada como uma das camadas do funil de 3 etapas descrito na
+Seção 3.3 (abriu → clicou → entrou no site → comprou).
+
+Passos de alto nível desse projeto futuro (detalhar em spec própria antes de implementar, seguindo o
+padrão de docs/specs/ do CLAUDE.md):
+
+1. Levantar na API do Klaviyo (Events endpoint, não Metrics) se dá pra puxar Opened Email/Clicked Email
+   por profile_id com timestamp, dentro dos limites de rate limit/paginação.
+2. Decidir onde esse dado mora: tabela nova (ex.: fact_email_engagement_events) isolada, no mesmo padrão
+   das tabelas fact_order_history_* criadas na sessão de recompra/LTV — não altera fact_orders nem nada
+   lido pelo dashboard.
+3. Definir a janela de backfill inicial (quanto histórico puxar) e o cron de manutenção incremental.
+4. Recalcular a Seção 5 (janela de atribuição) e a Seção 3.3 (definição de cliente frio) com dado real de
+   abertura/clique, testando os cortes de 90/180/365 dias mencionados no documento.
