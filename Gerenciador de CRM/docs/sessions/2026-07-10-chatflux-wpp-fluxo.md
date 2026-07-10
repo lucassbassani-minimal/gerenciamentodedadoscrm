@@ -31,11 +31,12 @@ Objetivo: ingerir os eventos de disparo/resposta do Chatflux e mostrar os mesmos
 4. **Testado localmente:** sintaxe do JS validada (`node --check`), smoke test com Playwright headless (page carrega, zero erros de console) — a verificação visual autenticada (login por magic-link @minimalclub.com.br) fica para o Daniel, pois exige credenciais reais.
 5. **Documentação atualizada:** `PRODUCT.md` (seção 5, glossário de Canal/Ativo) e `Controle Geral/ARCHITECTURE.md` (seção "ingestion-vekta" corrigida de "não iniciado" para o estado real + nova seção "ingestion-chatflux").
 
-## Pendências
+## Encerramento
 
-- [ ] Registrar `CHATFLUX_API_TOKEN`/`CHATFLUX_API_BASE_URL` nas env vars do projeto na Vercel (produção) — só está no `.env` local hoje. Sem isso, o cron `/api/cron/chatflux` falha em produção mesmo após o deploy.
-- [ ] Commit e push (`origin` + `empresa`) — ainda não feito, aguardando decisão do Daniel sobre o escopo do próximo push (ver conversa).
-- [ ] Verificação visual autenticada do seletor no navegador (Daniel).
+- [x] `CHATFLUX_API_TOKEN`/`CHATFLUX_API_BASE_URL` registradas na Vercel (Production, via CLI).
+- [x] Commit + push para `origin` e `empresa` (inclui também `fact_order_history_items`, feature separada já pendente de sessões anteriores — decisão do Daniel foi subir tudo junto).
+- [ ] Verificação visual autenticada do seletor no navegador (Daniel) — pendente, não automatizável (login por magic-link).
+- [ ] Acompanhar o primeiro disparo do cron `/api/cron/chatflux` em produção (roda aos minutos `5,35` de cada hora) para confirmar que não há erro de ambiente na Vercel.
 
 ## Decisões de produto confirmadas nesta sessão
 
