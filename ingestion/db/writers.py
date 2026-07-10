@@ -21,6 +21,9 @@ from ingestion.models.klaviyo_models import (
 )
 from ingestion.models.sheets_models import SessionRow, SessionUtmRow
 from ingestion.models.shopify_models import ShopifyOrder
+from ingestion.models.order_history_models import OrderHistoryLineItem
+from ingestion.models.order_history_legacy_models import OrderHistoryLegacyRow
+from ingestion.models.chatflux_models import ChatfluxEvento
 
 logger = logging.getLogger(__name__)
 
@@ -761,4 +764,87 @@ def upsert_sessions_utm(sb: Client, rows: list[SessionUtmRow], channel_ids: dict
         ).execute()
         total += len(batch)
     logger.info({"event": "sessions_utm_upserted", "count": total})
+    return total
+
+
+def upsert_order_history_items(sb: Client, items: list[OrderHistoryLineItem]) -> int:
+    if not items:
+        return 0
+    now = _now_iso()
+    records = []
+    for it in items:
+        records.append({
+            "order_name": it.order_name,
+            "shopify_order_id": it.shopify_order_id,
+            "line_number": it.line_number,
+            "email": it.email,
+            "financial_status": it.financial_status,
+            "paid_at": it.paid_at.isoformat() if it.paid_at is not None else None,
+            "created_at_shopify": it.created_at_shopify.isoformat(),
+            "order_total_brl": str(it.order_total_brl),
+            "order_subtotal_brl": str(it.order_subtotal_brl) if it.order_subtotal_brl is not None else None,
+            "discount_code": it.discount_code,
+            "discount_amount_brl": str(it.discount_amount_brl) if it.discount_amount_brl is not None else None,
+            "shipping_method": it.shipping_method,
+            "billing_province": it.billing_province,
+            "lineitem_quantity": it.lineitem_quantity,
+            "lineitem_name": it.lineitem_name,
+            "lineitem_price": str(it.lineitem_price),
+            "lineitem_sku": it.lineitem_sku,
+            "ingested_at": now,
+        })
+    batch_size = 1000
+    total = 0
+    for i in range(0, len(records), batch_size):
+        batch = records[i:i + batch_size]
+        sb.table("fact_order_history_items").upsert(batch, on_conflict="order_name,line_number").execute()
+        total += len(batch)
+    logger.info({"event": "order_history_items_upserted", "count": total})
+    return total
+
+
+def replace_order_history_legacy(sb: Client, rows: list[OrderHistoryLegacyRow]) -> int:
+    """Recarrega fact_order_history_legacy por completo (truncate + insert).
+    Fonte não tem chave única de pedido, então upsert incremental não se aplica —
+    cada execução substitui o conteúdo inteiro pelo CSV atual."""
+    sb.table("fact_order_history_legacy").delete().neq("email", "").execute()
+    if not rows:
+        return 0
+    now = _now_iso()
+    records = [{
+        "email": r.email,
+        "order_date": r.order_date.isoformat(),
+        "revenue_brl": str(r.revenue_brl),
+        "ingested_at": now,
+    } for r in rows]
+    batch_size = 1000
+    total = 0
+    for i in range(0, len(records), batch_size):
+        batch = records[i:i + batch_size]
+        sb.table("fact_order_history_legacy").insert(batch).execute()
+        total += len(batch)
+    logger.info({"event": "order_history_legacy_loaded", "count": total})
+    return total
+
+
+def upsert_chatflux_events(sb: Client, rows: list[ChatfluxEvento]) -> int:
+    """Upsert de eventos de disparo/resposta do Chatflux em fact_chatflux_events.
+    Chave de dedupe: (telefone, segmento, etapa, event_timestamp)."""
+    if not rows:
+        return 0
+    records = [{
+        "event_timestamp": r.event_timestamp.isoformat(),
+        "segmento": r.segmento,
+        "etapa": r.etapa,
+        "telefone": r.telefone,
+    } for r in rows]
+    batch_size = 1000
+    total = 0
+    for i in range(0, len(records), batch_size):
+        batch = records[i:i + batch_size]
+        sb.table("fact_chatflux_events").upsert(
+            batch, on_conflict="telefone,segmento,etapa,event_timestamp"
+        ).execute()
+        total += len(batch)
+    logger.info({"event": "chatflux_events_upserted", "count": total})
     return total

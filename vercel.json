@@ -14,7 +14,8 @@
     { "path": "/api/cron/forms",            "schedule": "0 9 * * *"    },
     { "path": "/api/cron/community",        "schedule": "0 8 * * *"    },
     { "path": "/api/cron/leads_sheets",     "schedule": "0 * * * *"    },
-    { "path": "/api/cron/wpp_flow",          "schedule": "30 * * * *"   }
+    { "path": "/api/cron/wpp_flow",          "schedule": "30 * * * *"   },
+    { "path": "/api/cron/chatflux",          "schedule": "5,35 * * * *" }
   ],
   "functions": {
     "api/cron/email_structure.py": { "maxDuration": 600 },

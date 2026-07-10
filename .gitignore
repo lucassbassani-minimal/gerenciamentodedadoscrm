@@ -29,8 +29,12 @@ supabase/.temp/
 # Exports manuais de dados brutos (backfills) — não versionar
 Todos os pedidos Minimal/
 Jornada do Cliente/Base de Touchpoints.csv
+Análises - Base de Dados Extras/
 
 # Claude Code — configurações locais com credenciais
 .claude/settings.local.json
 
 .vercel
+
+# Obsidian — configuração local do vault, não é conteúdo do projeto
+.obsidian/

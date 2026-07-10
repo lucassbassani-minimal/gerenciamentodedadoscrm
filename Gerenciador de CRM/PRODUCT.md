@@ -16,7 +16,7 @@ O time de CRM da Minimal Club opera cinco canais de marketing (e-mail fluxo, e-m
 - Não é um CRM de relacionamento (não gerencia contatos individualmente)
 - Não é um relatório de CAC, LTV ou ROAS (custos por canal fora do escopo V1)
 - Não é um sistema de atribuição multi-touch (apenas last-click via UTM)
-- Não substitui o Klaviyo, Vekta, Sendflow ou Shopify — lê dados deles, não os opera
+- Não substitui o Klaviyo, Vekta, Chatflux, Sendflow ou Shopify — lê dados deles, não os opera
 
 ---
 
@@ -88,7 +88,7 @@ O time de CRM da Minimal Club opera cinco canais de marketing (e-mail fluxo, e-m
 
 ### Canal
 - **Definição:** Uma das cinco divisões oficiais do CRM da Minimal Club, cada uma com sua fonte de dados, UTM e KPI principal.
-- **Exemplo:** "WhatsApp Fluxo" é um canal. Tem UTM própria, fonte de dados própria (Vekta) e KPI principal próprio (Receita/Inscrito).
+- **Exemplo:** "WhatsApp Fluxo" é um canal. Tem UTM própria, KPI principal próprio (Receita/Inscrito) e duas ferramentas de disparo como fonte de dados — Vekta e Chatflux (esta última divide o fluxo Welcome com a Vekta e roda sozinha o Carrinho Abandonado).
 - **Relações:** Todo ativo pertence a um canal. Todo pedido atribuído ao CRM pertence a exatamente um canal (last-click).
 - **NÃO confundir com:** "Plataforma", "ferramenta" — canal é a classificação de negócio, não a ferramenta técnica.
 
@@ -141,12 +141,26 @@ O time de CRM da Minimal Club opera cinco canais de marketing (e-mail fluxo, e-m
   3. Puxa métricas de fluxos e campanhas de e-mail do Klaviyo via API
   4. Puxa dados de formulários e base ativa do Klaviyo Forms API
   5. Puxa disparos, respostas e leads do Vekta via API (WhatsApp Fluxo e Campanha)
-  6. Puxa participantes e disparos do Sendflow via API (Comunidade)
-  7. Lê planilha Google Sheets (atualizada de hora em hora via exportação BigQuery) para Sessões/ATC/BCO
-  8. Grava dados brutos nas tabelas `fact_*` do Supabase (upsert por ID único)
-  9. Views calculadas (`vw_*`) atualizam automaticamente na próxima consulta
+  6. Puxa disparos e respostas do Chatflux via API (`GET /api/eventos`) — 2ª ferramenta de WhatsApp, atua no Welcome (dividindo disparos com a Vekta, somados sob o mesmo fluxo "Welcome Site") e sozinha no fluxo Carrinho Abandonado
+  7. Puxa participantes e disparos do Sendflow via API (Comunidade)
+  8. Lê planilha Google Sheets (atualizada de hora em hora via exportação BigQuery) para Sessões/ATC/BCO
+  9. Grava dados brutos nas tabelas `fact_*` do Supabase (upsert por ID único)
+  10. Views calculadas (`vw_*`) atualizam automaticamente na próxima consulta
 - **Pós-condições:** Dados nas tabelas `fact_*` refletem estado das últimas 48 horas em todas as fontes
 - **Divergências:** Se uma fonte falhar, as outras continuam. Dados da fonte com falha ficam com o último valor válido, com timestamp de última atualização exposto no dashboard.
+
+### Backfill manual de histórico de pedidos com produto (sob demanda, não recorrente)
+- **Por quê existe:** análise de recompra/LTV (fora do dashboard V1 — ver 7.3) precisa saber qual produto/categoria cada cliente comprou, dado que `fact_orders` não guarda linha de item. Não é uma feature do dashboard, é insumo para decisão de negócio (redesenho de fluxos de recompra).
+- **Quem dispara:** Daniel, manualmente, quando exporta pedidos do admin do Shopify (Orders → Export)
+- **Passos:**
+  1. Daniel exporta pedidos do Shopify em CSVs zipados (um item de pedido por linha) e coloca em `Todos os pedidos Minimal/` (pasta local, fora do git)
+  2. Roda `python -m ingestion.backfill.load_order_history --dry-run` para validar antes de gravar (R13)
+  3. Roda sem `--dry-run` para gravar em `fact_order_history_items` (tabela isolada, não altera `fact_orders`)
+  4. Apenas linhas com `Financial Status = paid` entram (R5)
+- **Cobertura atual:** pedidos pagos de 2025-01-06 a 2026-07-01 (limite do export que o Daniel tinha disponível — não é o histórico completo desde 2021)
+- **Pós-condições:** `fact_order_history_items` disponível para consultas ad-hoc de produto/categoria × recompra; não afeta nenhum KPI do dashboard
+
+---
 
 ### Ingestão de dados de sessão (BigQuery → Google Sheets → Supabase, horária)
 - **Quem dispara:** Export agendado do BigQuery para Google Sheets (configurado uma vez, roda sozinho)

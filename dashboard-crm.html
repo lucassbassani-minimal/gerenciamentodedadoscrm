@@ -1347,13 +1347,13 @@ async function fetchWppFlowInscritos() {
 }
 async function fetchWppFlowLeads(start, end) {
   const { data } = await _sb.from('vw_wpp_flow_leads')
-    .select('flow_name,data,respostas,destravar_objecao,necessita_atencao,total_leads')
+    .select('flow_name,data,respostas,destravar_objecao,necessita_atencao,total_leads,ferramenta')
     .gte('data', start).lte('data', end);
   return data || [];
 }
 async function fetchWppFlowRevenue(start, end) {
   const { data } = await _sb.from('vw_wpp_flow_revenue')
-    .select('flow_name,data,orders,revenue_brl')
+    .select('flow_name,data,orders,revenue_brl,ferramenta')
     .gte('data', start).lte('data', end);
   return data || [];
 }
@@ -1429,6 +1429,16 @@ let _resumoRows = [], _resumoRevByType = [],
     _resumoCompRows = [], _resumoCompRevByType = [],
     _resumoLeadsDaily = [],
     _resumoStart = '', _resumoEnd = '', _resumoCompStart = '', _resumoCompEnd = '';
+
+// WPP Fluxo — filtro Vekta / Chatflux / Ambos (client-side sobre linhas já vindas do banco)
+let wppToolFilter = 'ambos';
+function onWppToolFilterChange(value) {
+  wppToolFilter = value;
+  renderChannel('wf');
+}
+function _filterByTool(rows) {
+  return wppToolFilter === 'ambos' ? rows : rows.filter(r => r.ferramenta === wppToolFilter);
+}
 
 async function renderResumo() {
   const period = document.getElementById('f-period').value;
@@ -1760,6 +1770,16 @@ function channelHTML(key){
   const efBtn = key === 'ef'
     ? '<div style="display:flex;align-items:center;gap:8px"><span id="ef-refresh-status" style="font-size:11px;color:var(--muted)"></span><button class="btn btn-ghost btn-sm" id="btn-refresh-ef" onclick="triggerEmailFlowRefresh()">&#x21BB; Atualizar D-1</button></div>'
     : '';
+  const wfToolSelector = key === 'wf'
+    ? `<div style="display:flex;align-items:center;gap:6px">
+        <label for="wf-tool-filter" style="font-size:11px;color:var(--muted)">Ferramenta:</label>
+        <select id="wf-tool-filter" onchange="onWppToolFilterChange(this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">
+          <option value="ambos"    ${wppToolFilter==='ambos'?'selected':''}>Ambos</option>
+          <option value="vekta"    ${wppToolFilter==='vekta'?'selected':''}>Vekta</option>
+          <option value="chatflux" ${wppToolFilter==='chatflux'?'selected':''}>Chatflux</option>
+        </select>
+      </div>`
+    : '';
   const wcNotice = key === 'wc'
     ? `<div style="background:#fffbeb;border:1px solid #f59e0b;border-radius:8px;padding:10px 14px;margin:18px 0 4px;font-size:12px;color:#92400e">
         ⚠️ <strong>Dados parcialmente fictícios</strong> — apenas <strong>Receita</strong> e <strong>Sessões</strong> são reais. Disparos, rankings e demais volumes ainda não são ingeridos da Vekta.
@@ -1791,7 +1811,10 @@ function channelHTML(key){
       <div class="chart-box"><canvas id="chart-eff-${key}"></canvas></div>
     </div>
 
-    <div class="section-title">Métricas específicas · ${ch.name}</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:24px 0 10px">
+      <div class="section-title" style="margin:0">Métricas específicas · ${ch.name}</div>
+      ${wfToolSelector}
+    </div>
     <div class="grid grid-4" id="spec-${key}"></div>
 
     ${cfg.hasHealth?`
@@ -1880,7 +1903,7 @@ async function renderChannel(key){
   let emailDaily = [], emailDailyComp = [], emailAssetRows = [], flowItemsMap = {}, inscritos = 0, inscritosComp = 0;
   let emailFlowItemRows = [], emailFlowItemRowsComp = [], communityDaily = [], communityMsgRows = [];
   let em001ByDay = {};
-  let wppInscritosByFlow = [], wppLeadsRows = [], wppLeadsRowsComp = [], wppRevRows = [], wppPendingRows = [];
+  let wppInscritosByFlow = [], wppLeadsRows = [], wppLeadsRowsComp = [], wppRevRows = [], wppRevRowsComp = [], wppPendingRows = [];
   try {
     // Fetches nomeados por chave (em vez de índice posicional) — evita erro ao
     // adicionar/remover fetches condicionais conforme o canal.
@@ -1907,6 +1930,7 @@ async function renderChannel(key){
       fetches.wppLeadsRows     = fetchWppFlowLeads(start, end);
       fetches.wppLeadsRowsComp = fetchWppFlowLeads(comp.start, comp.end);
       fetches.wppRevRows     = fetchWppFlowRevenue(start, end);
+      fetches.wppRevRowsComp = fetchWppFlowRevenue(comp.start, comp.end);
       fetches.wppPendingRows = fetchWppFlowUtmPending();
     }
     const keys = Object.keys(fetches);
@@ -1939,8 +1963,9 @@ async function renderChannel(key){
     }
     if (isCommunity) { communityDaily = r.communityDaily || []; communityMsgRows = r.communityMsgRows || []; }
     if (key === 'wf') {
-      wppLeadsRows = r.wppLeadsRows || []; wppLeadsRowsComp = r.wppLeadsRowsComp || [];
-      wppRevRows = r.wppRevRows || []; wppPendingRows = r.wppPendingRows || [];
+      wppLeadsRows = _filterByTool(r.wppLeadsRows || []); wppLeadsRowsComp = _filterByTool(r.wppLeadsRowsComp || []);
+      wppRevRows = _filterByTool(r.wppRevRows || []); wppRevRowsComp = _filterByTool(r.wppRevRowsComp || []);
+      wppPendingRows = r.wppPendingRows || [];
     }
   } catch(err) {
     document.getElementById('kpi-'+key).innerHTML =
@@ -2295,7 +2320,12 @@ async function renderChannel(key){
     const totalRespostasComp = wppLeadsRowsComp.reduce((sum, r) => sum + (+r.respostas || 0), 0);
     const totalDestravarComp = wppLeadsRowsComp.reduce((sum, r) => sum + (+r.destravar_objecao || 0), 0);
     const totalNecessitaComp = wppLeadsRowsComp.reduce((sum, r) => sum + (+r.necessita_atencao || 0), 0);
-    const purchasesComp = compTotals.orders;
+    // Receita/pedidos já filtrados por ferramenta (wppRevRows) — não usar s.rev/s.purchases
+    // aqui, que são o total do canal inteiro (Vekta+Chatflux) independente do filtro.
+    const wppRevenue     = wppRevRows.reduce((sum, r) => sum + (parseFloat(r.revenue_brl) || 0), 0);
+    const wppOrders      = wppRevRows.reduce((sum, r) => sum + (+r.orders || 0), 0);
+    const wppRevenueComp = wppRevRowsComp.reduce((sum, r) => sum + (parseFloat(r.revenue_brl) || 0), 0);
+    const purchasesComp  = wppRevRowsComp.reduce((sum, r) => sum + (+r.orders || 0), 0);
     spec = [
       {label:'Disparos (leads criados)',   val: totalDisparos > 0 ? fmtInt(totalDisparos) : '—',
         delta: _deltaBadge(totalDisparos, totalDisparosComp)},
@@ -2309,10 +2339,10 @@ async function renderChannel(key){
         delta: _deltaBadge(totalNecessita, totalNecessitaComp, true)},
       {label:'Retenção da IA',             val: totalRespostas > 0 ? fmtPct1(safe(totalRespostas - totalNecessita, totalRespostas)) : '—',
         delta: (totalRespostas>0&&totalRespostasComp>0)?_deltaBadge(safe(totalRespostas-totalNecessita,totalRespostas), safe(totalRespostasComp-totalNecessitaComp,totalRespostasComp)):''},
-      {label:'Conversão Resposta → Venda', val: totalRespostas > 0 ? fmtPct1(safe(s.purchases, totalRespostas)) : '—',
-        delta: (totalRespostas>0&&totalRespostasComp>0)?_deltaBadge(safe(s.purchases,totalRespostas), safe(purchasesComp,totalRespostasComp)):''},
-      {label:'Receita / Disparo',          val: totalDisparos > 0 ? fmtBRL2(safe(s.rev, totalDisparos)) : '—',
-        delta: (totalDisparos>0&&totalDisparosComp>0)?_deltaBadge(safe(s.rev,totalDisparos), safe(compTotals.revenue_brl,totalDisparosComp)):''},
+      {label:'Conversão Resposta → Venda', val: totalRespostas > 0 ? fmtPct1(safe(wppOrders, totalRespostas)) : '—',
+        delta: (totalRespostas>0&&totalRespostasComp>0)?_deltaBadge(safe(wppOrders,totalRespostas), safe(purchasesComp,totalRespostasComp)):''},
+      {label:'Receita / Disparo',          val: totalDisparos > 0 ? fmtBRL2(safe(wppRevenue, totalDisparos)) : '—',
+        delta: (totalDisparos>0&&totalDisparosComp>0)?_deltaBadge(safe(wppRevenue,totalDisparos), safe(wppRevenueComp,totalDisparosComp)):''},
     ];
   } else {
     // WPP Campanha — mock (sem integração Vekta ainda)

@@ -122,9 +122,25 @@ O resultado: dados de Shopify, Klaviyo e GA4 aparecem unificados num único pain
 - **Bloqueio:** `SENDFLOW_API_KEY` no `.env` retorna 401 — verificar chave no painel do Sendflow
 - **Estado:** ⏳ aguardando chave API válida
 
-#### ingestion-vekta (não iniciado)
-- **Responsabilidade:** Buscar métricas de WhatsApp Fluxo e Campanha → `fact_wpp_sends`
-- **Bloqueio:** confirmar se Vekta tem API pública
+#### ingestion-vekta (implementado — via CSV + planilha, não API)
+- **Responsabilidade:** Inscritos de WhatsApp Fluxo (Vekta/Alia) → `fact_wpp_flow_subscribers`; disparos/respostas por fluxo → `leads_webhook` (mapeado via `dim_wpp_origem_mapping`)
+- **Entry point:** `api/cron/wpp_flow.py` → `ingestion/sources/wpp_flow_subscribers.py:run_wpp_flow_subscribers_ingestion()`
+- **Fontes:** CSV público (Google Sheets export Vekta/Alia) via `WPP_FLOW_SUBSCRIBERS_CSV_URL`; `leads_webhook` alimentado por `ingestion/sources/leads_sheets_export.py` (cron `api/cron/leads_sheets.py`)
+- **Cron:** `30 * * * *` (wpp_flow) e `0 * * * *` (leads_sheets)
+- **Mapeamento fluxo:** `dim_wpp_alia_campanha_mapping` (por `alia_campanha`) e `dim_wpp_origem_mapping` (por `origem`) → `flow_name`; painel de conferência de UTM pendente no dashboard (`vw_wpp_flow_utm_pending`)
+- **Nota:** este item do documento estava desatualizado (marcado "não iniciado"); corrigido em 2026-07-10 ao implementar o Chatflux, que depende do mesmo conjunto de views
+- **Estado:** ✅ implementado
+
+#### ingestion-chatflux (implementado — 2026-07-10)
+- **Responsabilidade:** Disparos/respostas de WhatsApp da 2ª ferramenta (Chatflux) → `fact_chatflux_events`. Atua no fluxo Welcome (dividido com a Vekta, somado sob `flow_name='Welcome Site'`, sem diferenciar Novos/Recorrentes) e sozinha no fluxo novo `Carrinho Abandonado`.
+- **Entry point:** `api/cron/chatflux.py` → `ingestion/sources/chatflux.py:run_chatflux_ingestion()`
+- **Fonte:** API própria do Chatflux (`GET /api/eventos`, Bearer token), janela incremental de 3 dias por execução
+- **Cron:** `5,35 * * * *`
+- **Views atualizadas:** `vw_wpp_flow_leads`, `vw_wpp_flow_revenue`, `vw_wpp_flow_inscritos` — ganharam coluna `ferramenta` (`vekta`/`chatflux`) que alimenta o seletor Vekta/Chatflux/Ambos no dashboard (páginas "Métricas Específicas" e "Detalhamento por Fluxo" do WhatsApp Fluxo)
+- **Receita por ferramenta (R4 — last-click UTM continua a regra; isto é subclassificação por cima):** `utm_campaign='abandoned_cart_ia'` → Chatflux; dentro do fluxo `welcome`, `utm_content='chatflux'` vs `utm_content='vekta'`
+- **Migration:** `supabase/migrations/20260710000042_chatflux_wpp_fluxo.sql`
+- **Spec:** `Gerenciador de CRM/docs/specs/chatflux-wpp-fluxo.md`
+- **Estado:** ✅ implementado e validado (ingestão local + views conferidas no banco)
 
 ### Diagrama (ASCII)
 
@@ -352,6 +368,77 @@ Registro de execuções dos cron jobs — usado pelo banner de alertas no dashbo
 
 ---
 
+#### fact_order_history_items
+Histórico de pedidos pagos do Shopify com **item de linha (produto)** — origem: export manual do Shopify (CSV), não API/cron. Tabela isolada para análise de recompra/LTV por produto; não alimenta o dashboard e não substitui `fact_orders`.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid | PK |
+| order_name | text | Número do pedido no Shopify (não UUID) |
+| shopify_order_id | text | Id interno do Shopify |
+| line_number | integer | Posição do item dentro do pedido |
+| email | text | E-mail do cliente |
+| financial_status | text | Sempre "paid" — únicos carregados (R5) |
+| paid_at | timestamptz | Nulo em ~0,07% dos pedidos pagos (pedidos sem esse campo no export do Shopify) |
+| created_at_shopify | timestamptz | Data de criação do pedido |
+| order_total_brl / order_subtotal_brl | numeric | Repetido em todas as linhas do mesmo pedido |
+| discount_code / discount_amount_brl | text / numeric | — |
+| shipping_method | text | — |
+| billing_province | text | Estado de cobrança |
+| lineitem_quantity / lineitem_name / lineitem_price / lineitem_sku | — | Dados do produto da linha |
+| ingested_at | timestamptz | — |
+
+- **Índice único:** `(order_name, line_number)`
+- **Cobertura:** pedidos pagos de 2025-01-06 a 2026-07-01 (limite do export disponível — não é histórico completo desde 2021, diferente da planilha `vendas_historico` usada na análise de recompra)
+- **Carga:** `python -m ingestion.backfill.load_order_history` — script avulso, não cron. Fonte: pasta local `Todos os pedidos Minimal/` (fora do git)
+- **RLS:** SELECT anon; INSERT/UPDATE/UPSERT service_role
+
+---
+
+#### mv_order_history_category
+Materialized view sobre `fact_order_history_items` — categoria de produto dominante (maior valor) por pedido. Existe como view materializada (não view normal) porque a versão original com `row_number() OVER` estourava `statement_timeout` em leitura paginada externa.
+
+- **Colunas:** `order_name, email, paid_at, created_at_shopify, order_total_brl, categoria_dominante`
+- **Categorias:** Camiseta, Calça, Camisa Social/Polo, Jaqueta/Overshirt, Tricot/Henley, Cueca, Acessório (Carteira/Perfume), Cuidado Facial, Outro — classificação por `ILIKE` no `lineitem_name`
+- **Precisa `REFRESH MATERIALIZED VIEW` manual** se `fact_order_history_items` receber nova carga
+- **RLS:** GRANT SELECT para anon e service_role
+
+---
+
+#### Materialized views de análise de recompra/LTV (não usadas pelo dashboard)
+Construídas na sessão de 02/07/2026 para o diagnóstico "como aumentar o LTV de 30 dias via recompra". Todas em cima de `fact_order_history_legacy` e/ou `fact_order_history_items` — nenhuma toca `fact_orders` ou views do dashboard.
+
+| View | O que entrega |
+|---|---|
+| `mv_customer_purchase_sequence` | Cada pedido de cada cliente numerado por ordem (seq), com dias desde o pedido anterior |
+| `mv_customer_ltv_windows` | Por cliente: LTV e nº de recompras nas janelas 7/15/30/45/60/90/180d e total — recompra exige `order_date > first_purchase_date` (pedidos duplicados no mesmo dia não contam) |
+| `mv_order_dominant_product` | Produto (modelo, sem cor/tamanho — `split_part(lineitem_name,' - ',1)`) de maior valor por pedido |
+| `mv_purchase_sequence_product` | Produto de cada compra (não só a 1ª) onde há dado de produto disponível |
+| `mv_first_purchase_category` / `mv_first_purchase_product` | Categoria/produto da 1ª compra de cada cliente, cruzando `fact_order_history_legacy` com `mv_order_history_category`/`mv_order_dominant_product` por e-mail+data (fuso America/Sao_Paulo), com desempate por proximidade de valor quando há 2 pedidos no mesmo dia |
+
+- **Precisam `REFRESH MATERIALIZED VIEW` manual** em cadeia se as tabelas-fonte receberem nova carga (`mv_customer_purchase_sequence` → `mv_customer_ltv_windows`/`mv_purchase_sequence_product` → `mv_first_purchase_*`)
+- **RLS:** GRANT SELECT para anon e service_role, mesmo padrão de `mv_order_history_category`
+
+---
+
+#### fact_order_history_legacy
+Histórico de pedidos por e-mail desde 2021 (planilha Google Sheets/BigQuery, sem produto) — usada para funil de recompra, LTV e cohorts de base inteira. Complementa `fact_order_history_items` (que só tem produto a partir de 2025-01).
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid | PK |
+| email | text | — |
+| order_date | date | — |
+| revenue_brl | numeric(12,2) | — |
+| ingested_at | timestamptz | — |
+
+- **Sem chave única de pedido** (fonte não tem order_id) — carga é truncate + insert completo, não upsert incremental
+- **Cobertura:** 25/10/2021 a 01/07/2026 — 499.280 linhas válidas de 500.000 (720 descartadas por data/valor/e-mail inválido)
+- **Carga:** `python -m ingestion.backfill.load_order_history_legacy --csv <caminho>` — script avulso, não cron
+- **RLS:** SELECT anon; INSERT/UPDATE/DELETE service_role
+
+---
+
 ### Tabelas de comunidade (criadas — aguardando dados)
 
 #### fact_community_actions
@@ -531,6 +618,7 @@ Analytics de crescimento por release por dia — entradas, saídas e cliques.
 | 2026-06-09 | `includeFiles: dashboard-crm.html` em `vercel.json` | Sem isso, Vercel servia versão cacheada do HTML mesmo após deploy com código novo | Qualquer novo arquivo lido em runtime por Flask precisa de entrada em includeFiles |
 | 2026-06-09 | Botão manual "↻ Atualizar D-1" no dashboard (E-mail Fluxo) | Cron email_flow continua recebendo rate limit do Klaviyo; botão permite atualização sob demanda sem depender do cron | — |
 | 2026-06-09 | Configuração de UTM via formulário estruturado no dashboard | Substituiu textarea freeform + dependência de sessão com Claude; grava direto em `flow_utm_config` via `POST /admin/utm-config` com service_role_key | — |
+| 2026-07-02 | `fact_order_history_items` como tabela isolada, alimentada por backfill manual de CSV (não API/cron) | Análise de recompra/LTV precisa de produto por pedido, que `fact_orders` não guarda; evitar tocar na tabela de receita/atribuição já validada | Se precisar de produto em tempo real no dashboard, exigirá cron dedicado lendo a API de Orders do Shopify (não só o webhook/API atual usada por `fact_orders`) |
 
 ---
 
@@ -586,6 +674,8 @@ Analytics de crescimento por release por dia — entradas, saídas e cliques.
 | `ingestion/sources/klaviyo_flow_metrics.py` | Lógica de busca de métricas via Klaviyo metric-aggregates API — lê estrutura do banco | Claude com cuidado — throttle sensível |
 | `ingestion/sources/klaviyo_structure_sync.py` | Lógica de sincronização de estrutura de fluxos (dim_assets + dim_asset_items) | Claude ao ajustar throttle |
 | `supabase/migrations/` | Schema do banco versionado | NUNCA editar migration já aplicada — sempre criar nova |
+| `ingestion/backfill/load_order_history.py` | Backfill manual (não cron) de `fact_order_history_items` a partir de export CSV do Shopify | Claude ao rodar novo backfill; sempre `--dry-run` antes |
+| `ingestion/backfill/load_order_history_legacy.py` | Backfill manual (não cron) de `fact_order_history_legacy` a partir da planilha de pedidos por e-mail (truncate + insert completo) | Claude ao recarregar; sempre `--dry-run` antes |
 | `vercel.json` | Crons, routing, maxDuration | Claude ao adicionar cron ou ajustar timeout |
 | `.env` | Credenciais reais | Apenas Daniel — Claude nunca lê nem commita |
 | `PRODUCT.md` | Fonte de verdade do domínio | Claude + Daniel quando produto muda |
