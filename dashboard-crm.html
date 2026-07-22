@@ -729,6 +729,18 @@ tr.nested td:first-child{padding-left:36px;color:var(--muted)}
     </div>
   </div>
 
+  <div class="section-title">Tempo até a 2ª compra <span class="hint">entre clientes que já recompraram — quantos dias depois da 1ª compra</span></div>
+  <div class="grid grid-4" style="margin-bottom:14px">
+    <div class="card">
+      <div class="card-title"><span>80% das 2ªs compras acontecem em até</span></div>
+      <div class="kpi-value" id="rc-p80-dias">—</div>
+      <div class="delta" style="opacity:.75;font-weight:400">dias após a 1ª compra</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="chart-box lg"><canvas id="rc-chart-days-second"></canvas></div>
+  </div>
+
 </section>
 
 </main>
@@ -4489,6 +4501,11 @@ function initRecompraTab() {
     }
     return all;
   }
+  async function fetchDaysToSecondPurchase() {
+    const { data, error } = await _sb.from('vw_repurchase_days_to_second_histogram').select('*').order('dias');
+    if (error) throw error;
+    return data;
+  }
 
   function renderKpis() {
     const grid = document.getElementById('rc-kpi-grid');
@@ -4706,18 +4723,65 @@ function initRecompraTab() {
     table.appendChild(tbody);
   }
 
+  function renderDaysToSecondPurchase(rows) {
+    const BIN_SIZE = 15;
+    const bins = {};
+    let overflowClientes = 0;
+    rows.forEach(r => {
+      if (r.dias >= 730) { overflowClientes += r.clientes; return; }
+      const binStart = Math.floor(r.dias / BIN_SIZE) * BIN_SIZE;
+      bins[binStart] = (bins[binStart] || 0) + r.clientes;
+    });
+    const binStarts = Object.keys(bins).map(Number).sort((a, b) => a - b);
+    const labels = binStarts.map(b => `${b}-${b + BIN_SIZE - 1}`);
+    const values = binStarts.map(b => bins[b]);
+    if (overflowClientes > 0) {
+      labels.push('730+');
+      values.push(overflowClientes);
+    }
+
+    const p80Row = rows.find(r => r.pct_acumulado >= 80);
+    document.getElementById('rc-p80-dias').textContent = p80Row ? fmtInt(p80Row.dias) : '—';
+
+    mkChart('rc-chart-days-second', {
+      type: 'bar',
+      data: { labels, datasets: [{
+        label: 'Clientes', data: values,
+        backgroundColor: '#2563eb', borderRadius: 3,
+      }]},
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            displayColors: false,
+            callbacks: {
+              title: items => items[0].label + ' dias',
+              label: c => fmtInt(c.parsed.y) + ' clientes',
+            }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 9 }, maxRotation: 60, minRotation: 60, autoSkip: true, maxTicksLimit: 30 } },
+          y: { ticks: { callback: v => fmtInt(v) }, grid: { color: '#f1f4f8' } },
+        }
+      }
+    });
+  }
+
   return (async function renderAll() {
     document.getElementById('rc-kpi-grid').innerHTML = '<div class="empty-note" style="grid-column:1/-1">Carregando dados...</div>';
     try {
-      let matrixRows;
-      [MONTHLY, LTV, COHORT_SIZES, matrixRows] = await Promise.all([
-        fetchMonthly(), fetchLtv(), fetchCohortSizes(), fetchCohortMatrixAll(),
+      let matrixRows, daysToSecondRows;
+      [MONTHLY, LTV, COHORT_SIZES, matrixRows, daysToSecondRows] = await Promise.all([
+        fetchMonthly(), fetchLtv(), fetchCohortSizes(), fetchCohortMatrixAll(), fetchDaysToSecondPurchase(),
       ]);
       renderRefMonthSelector();
       renderKpis();
       renderMetricSelector();
       document.getElementById('rc-f-cohort-view').addEventListener('change', () => renderCohortTable(LAST_MATRIX_ROWS, getRefMonth()));
       renderCohortTable(matrixRows, getRefMonth());
+      renderDaysToSecondPurchase(daysToSecondRows);
     } catch (err) {
       document.getElementById('rc-kpi-grid').innerHTML = `<div class="error-note" style="grid-column:1/-1">Erro ao carregar: ${err.message}</div>`;
       throw err;
