@@ -11,7 +11,7 @@ diferente do export histórico em CSV (ISO, decimal com ponto).
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 import gspread
@@ -54,7 +54,12 @@ def _parse_valor_br(raw: str) -> Decimal | None:
         return None
 
 
-def fetch_repurchase_deals_diario() -> tuple[list[RepurchaseDealRow], int, dict[str, int]]:
+def fetch_repurchase_deals_diario(
+    since_date: date | None = None,
+) -> tuple[list[RepurchaseDealRow], int, dict[str, int]]:
+    """since_date: se informado, descarta linhas com data_de_fechamento anterior
+    a essa data — usado para carregar só a janela recente (última data já
+    ingerida no banco em diante) em vez da planilha inteira a cada execução."""
     ws = _get_worksheet()
     values = ws.get_all_values()
     if not values:
@@ -64,7 +69,7 @@ def fetch_repurchase_deals_diario() -> tuple[list[RepurchaseDealRow], int, dict[
     idx = {name: i for i, name in enumerate(header)}
 
     rows: list[RepurchaseDealRow] = []
-    skipped_reasons: dict[str, int] = {"etapa_fora_escopo": 0, "sem_email": 0, "sem_valor": 0, "data_invalida": 0, "validacao": 0}
+    skipped_reasons: dict[str, int] = {"etapa_fora_escopo": 0, "sem_email": 0, "sem_valor": 0, "data_invalida": 0, "fora_da_janela": 0, "validacao": 0}
 
     for raw_row in data_rows:
         etapa = raw_row[idx["etapa_do_negocio"]].strip()
@@ -85,6 +90,10 @@ def fetch_repurchase_deals_diario() -> tuple[list[RepurchaseDealRow], int, dict[
         closed_at = _parse_date_br(raw_row[idx["data_de_fechamento"]])
         if closed_at is None:
             skipped_reasons["data_invalida"] += 1
+            continue
+
+        if since_date is not None and closed_at < since_date:
+            skipped_reasons["fora_da_janela"] += 1
             continue
 
         first_purchase_raw = _parse_date_br(raw_row[idx["data_primeira_compra"]])

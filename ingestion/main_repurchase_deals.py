@@ -6,16 +6,21 @@ import logging
 
 from ingestion.analytics.repurchase_monthly_metrics import compute_monthly_metrics
 from ingestion.db.client import get_supabase_client
-from ingestion.db.writers import replace_repurchase_deals, replace_repurchase_monthly_metrics
+from ingestion.db.writers import (
+    get_last_ingested_closed_at,
+    replace_repurchase_deals,
+    replace_repurchase_monthly_metrics,
+)
 from ingestion.sources.repurchase_deals_sheets import fetch_repurchase_deals_diario
 
 logger = logging.getLogger(__name__)
 
 
 def run_repurchase_deals_diario() -> dict:
-    rows, skipped, reasons = fetch_repurchase_deals_diario()
     sb = get_supabase_client()
-    written = replace_repurchase_deals(sb, rows, source="sheets_diario")
+    since_date = get_last_ingested_closed_at(sb, source="sheets_diario")
+    rows, skipped, reasons = fetch_repurchase_deals_diario(since_date=since_date)
+    written = replace_repurchase_deals(sb, rows, source="sheets_diario", since_date=since_date)
     logger.info({"event": "repurchase_deals_diario_done", "written": written, "skipped": skipped, "reasons": reasons})
 
     metrics_rows = compute_monthly_metrics(sb)

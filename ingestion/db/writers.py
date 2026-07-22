@@ -828,40 +828,60 @@ def replace_order_history_legacy(sb: Client, rows: list[OrderHistoryLegacyRow]) 
     return total
 
 
-def replace_repurchase_deals(sb: Client, rows: list[RepurchaseDealRow], source: str) -> int:
-    """Recarrega por completo apenas a fatia `source` de fact_repurchase_deals
-    (truncate + insert), preservando as demais fontes intactas.
+def get_last_ingested_closed_at(sb: Client, source: str) -> date | None:
+    """Última data de fechamento já gravada para essa fonte em fact_repurchase_deals,
+    ou None se a fonte ainda não tem nenhuma linha (primeira carga)."""
+    resp = (
+        sb.table("fact_repurchase_deals")
+        .select("closed_at")
+        .eq("source", source)
+        .order("closed_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not resp.data:
+        return None
+    return date.fromisoformat(resp.data[0]["closed_at"])
 
-    source='bq_historico': backfill único (2021-03-18 a 2026-06-30), roda uma vez.
-    source='sheets_diario': recarregado a cada execução do cron diário — a planilha
-    "Base de Dados" não tem chave única de negócio, então upsert incremental não se aplica.
+
+def replace_repurchase_deals(
+    sb: Client, rows: list[RepurchaseDealRow], source: str, since_date: date | None = None,
+) -> int:
+    """Recarrega a fatia `source` de fact_repurchase_deals (delete + insert),
+    preservando as demais fontes intactas.
+
+    source='bq_historico': backfill único (2021-03-18 a 2026-06-30), roda uma vez,
+    since_date=None (recarrega tudo).
+    source='sheets_diario': recarregado a cada execução do cron diário. A planilha
+    "Base de Dados" não tem chave única de negócio, então upsert incremental não se
+    aplica — mas reprocessar a planilha inteira todo dia fica mais caro à medida que
+    ela cresce. Por isso, quando since_date é informado (última data já ingerida),
+    só a janela [since_date, hoje] é apagada e recarregada — dias anteriores, já
+    ingeridos e estáveis, ficam intocados. since_date=None mantém o comportamento
+    antigo (recarrega a fonte inteira), usado no primeiro carregamento.
 
     O delete é feito em janelas de 30 dias por closed_at — apagar centenas de milhares
     de linhas num único DELETE estoura o statement timeout do Postgres/PostgREST, e
     fazer isso por lote de ids gera uma URL longa demais (id=in.(...) com milhares de
     uuids) e o servidor rejeita com 400 Bad Request. Por data o filtro é sempre curto.
     """
-    bounds = (
-        sb.table("fact_repurchase_deals")
-        .select("closed_at")
-        .eq("source", source)
-        .order("closed_at", desc=False)
-        .limit(1)
-        .execute()
-    )
-    deleted = 0
-    if bounds.data:
-        start = date.fromisoformat(bounds.data[0]["closed_at"])
-        end_resp = (
+    if since_date is not None:
+        start: date | None = since_date
+        end: date | None = date.today()
+    else:
+        bounds = (
             sb.table("fact_repurchase_deals")
             .select("closed_at")
             .eq("source", source)
-            .order("closed_at", desc=True)
+            .order("closed_at", desc=False)
             .limit(1)
             .execute()
         )
-        end = date.fromisoformat(end_resp.data[0]["closed_at"])
+        start = date.fromisoformat(bounds.data[0]["closed_at"]) if bounds.data else None
+        end = get_last_ingested_closed_at(sb, source) if start is not None else None
 
+    deleted = 0
+    if start is not None and end is not None:
         window = timedelta(days=30)
         cursor = start
         while cursor <= end:
@@ -877,7 +897,7 @@ def replace_repurchase_deals(sb: Client, rows: list[RepurchaseDealRow], source: 
             deleted += len(resp.data)
             cursor = chunk_end
     if deleted:
-        logger.info({"event": "repurchase_deals_deleted", "source": source, "count": deleted})
+        logger.info({"event": "repurchase_deals_deleted", "source": source, "count": deleted, "since_date": since_date.isoformat() if since_date else None})
 
     if not rows:
         return 0
