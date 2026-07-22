@@ -24,6 +24,7 @@ from ingestion.models.shopify_models import ShopifyOrder
 from ingestion.models.order_history_models import OrderHistoryLineItem
 from ingestion.models.order_history_legacy_models import OrderHistoryLegacyRow
 from ingestion.models.chatflux_models import ChatfluxEvento
+from ingestion.models.chatflux_leads_models import ChatfluxLeadDiario
 from ingestion.models.repurchase_deals_models import RepurchaseDealRow
 
 logger = logging.getLogger(__name__)
@@ -956,4 +957,28 @@ def upsert_chatflux_events(sb: Client, rows: list[ChatfluxEvento]) -> int:
         ).execute()
         total += len(batch)
     logger.info({"event": "chatflux_events_upserted", "count": total})
+    return total
+
+
+def upsert_chatflux_leads_diario(sb: Client, rows: list[ChatfluxLeadDiario]) -> int:
+    """Upsert dos totais diários de leads por vendedor do Chatflux em
+    fact_chatflux_leads_diario. Chave de dedupe: (day, segmento, vendedor_nome)."""
+    if not rows:
+        return 0
+    records = [{
+        "day": r.day.isoformat(),
+        "segmento": r.segmento,
+        "vendedor_id": r.vendedor_id,
+        "vendedor_nome": r.vendedor_nome,
+        "total_leads": r.total_leads,
+    } for r in rows]
+    batch_size = 1000
+    total = 0
+    for i in range(0, len(records), batch_size):
+        batch = records[i:i + batch_size]
+        sb.table("fact_chatflux_leads_diario").upsert(
+            batch, on_conflict="day,segmento,vendedor_nome"
+        ).execute()
+        total += len(batch)
+    logger.info({"event": "chatflux_leads_diario_upserted", "count": total})
     return total
