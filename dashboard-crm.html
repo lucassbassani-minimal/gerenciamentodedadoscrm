@@ -3179,7 +3179,10 @@ document.querySelectorAll('.tab-btn').forEach(b=>{
       return;
     }
     if(p === 'recompra'){
-      if(!_recompraLoaded){ _recompraLoaded = true; initRecompraTab(); }
+      if(!_recompraLoaded){
+        _recompraLoaded = true;
+        initRecompraTab().catch(() => { _recompraLoaded = false; });
+      }
       window.scrollTo({top:0,behavior:'smooth'});
       return;
     }
@@ -4737,23 +4740,23 @@ function initRecompraTab() {
     table.appendChild(tbody);
   }
 
-  (async function renderAll() {
+  return (async function renderAll() {
     document.getElementById('rc-kpi-grid').innerHTML = '<div class="empty-note" style="grid-column:1/-1">Carregando dados...</div>';
-    let matrixRows;
     try {
+      let matrixRows;
       [MONTHLY, LTV, COHORT_SIZES, matrixRows] = await Promise.all([
         fetchMonthly(), fetchLtv(), fetchCohortSizes(), fetchCohortMatrixAll(),
       ]);
+      renderRefMonthSelector();
+      renderKpis();
+      renderMetricSelector();
+      renderLtvChart();
+      document.getElementById('rc-f-cohort-view').addEventListener('change', () => renderCohortTable(LAST_MATRIX_ROWS, getRefMonth()));
+      renderCohortTable(matrixRows, getRefMonth());
     } catch (err) {
       document.getElementById('rc-kpi-grid').innerHTML = `<div class="error-note" style="grid-column:1/-1">Erro ao carregar: ${err.message}</div>`;
-      return;
+      throw err;
     }
-    renderRefMonthSelector();
-    renderKpis();
-    renderMetricSelector();
-    renderLtvChart();
-    document.getElementById('rc-f-cohort-view').addEventListener('change', () => renderCohortTable(LAST_MATRIX_ROWS, getRefMonth()));
-    renderCohortTable(matrixRows, getRefMonth());
   })();
 }
 </script>
