@@ -38,3 +38,7 @@ Análises - Base de Dados Extras/
 
 # Obsidian — configuração local do vault, não é conteúdo do projeto
 .obsidian/
+
+# Repositório de outro projeto (mc-growth), clonado aqui a pedido do Daniel —
+# repo git independente, nunca deve ser rastreado pelo git deste projeto
+mc-growth/
