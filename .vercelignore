@@ -1,0 +1,8 @@
+# Pastas de análise/dados que não são código do app (ver CLAUDE.md seção 3) — não são
+# usadas por nenhuma função em api/ em tempo de execução, mas por padrão o builder Python
+# da Vercel empacota o diretório inteiro do projeto dentro de cada função. Sem isso aqui,
+# o bundle passa do limite de 225MB (mc-growth sozinho tem ~190MB de bases locais).
+mc-growth/
+Análises - Base de Dados Extras/
+Jornada do Cliente/
+Tratamento de Dados - Extras/
