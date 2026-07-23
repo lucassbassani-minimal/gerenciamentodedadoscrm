@@ -288,6 +288,78 @@ tr.nested td:first-child{padding-left:36px;color:var(--muted)}
 .log-toast.success{background:var(--success)}
 .log-kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
 @media(max-width:900px){.log-kpi-grid{grid-template-columns:repeat(2,1fr)}}
+/* Jornada de Produto — bloco com identidade visual própria (mesma da análise local em
+   mc-growth), isolado do resto do dashboard por baixo do prefixo .jp-artifact — nada
+   aqui herda ou sobrescreve as variáveis/classes do resto da página. */
+.jp-artifact {
+  --jp-page: #f9f9f7; --jp-surface: #fcfcfb; --jp-surface-2: #f2f1ec;
+  --jp-ink: #0b0b0b; --jp-ink-2: #52514e; --jp-ink-muted: #898781;
+  --jp-grid: #e1e0d9; --jp-baseline: #c3c2b7; --jp-border: rgba(11,11,11,0.10);
+  --jp-series-1: #2a78d6; --jp-series-2: #eb6834; --jp-accent-wash: #eaf1fb;
+  background: var(--jp-page); color: var(--jp-ink);
+  border: 1px solid var(--jp-border); border-radius: 12px;
+  padding: 24px 22px 28px; font-family: system-ui,-apple-system,"Segoe UI",sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.jp-artifact * { box-sizing: border-box; }
+.jp-artifact .jp-inner { display: flex; flex-direction: column; gap: 20px; }
+.jp-artifact header.jp-top { display: flex; flex-direction: column; gap: 6px; }
+.jp-artifact header.jp-top .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--jp-ink-muted); }
+.jp-artifact header.jp-top h1 { font-size: 22px; font-weight: 700; margin: 0; letter-spacing: -.01em; text-wrap: balance; color: var(--jp-ink); }
+.jp-artifact header.jp-top p.jp-sub { margin: 0; color: var(--jp-ink-2); font-size: 13px; max-width: 68ch; line-height: 1.5; }
+.jp-artifact .jp-banner { display: flex; align-items: center; gap: 10px; background: var(--jp-accent-wash); border: 1px solid var(--jp-border); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--jp-ink-2); }
+.jp-artifact .jp-banner .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--jp-series-2); flex: none; }
+.jp-artifact .jp-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.jp-artifact .jp-controls label { font-size: 13px; color: var(--jp-ink-2); font-weight: 500; }
+.jp-artifact select#jp-entrada {
+  font: inherit; font-size: 14px; font-weight: 600; color: var(--jp-ink);
+  background: var(--jp-surface); border: 1px solid var(--jp-border); border-radius: 8px;
+  padding: 8px 34px 8px 12px; cursor: pointer; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6' fill='%23898781'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center;
+}
+.jp-artifact select#jp-entrada:focus-visible { outline: 2px solid var(--jp-series-1); outline-offset: 2px; }
+.jp-artifact .jp-tiles { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
+.jp-artifact .jp-tile { background: var(--jp-surface); border: 1px solid var(--jp-border); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.jp-artifact .jp-tile .label { font-size: 12px; color: var(--jp-ink-muted); font-weight: 500; }
+.jp-artifact .jp-tile .value { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; color: var(--jp-ink); }
+.jp-artifact .jp-tile .value small { font-size: 13px; font-weight: 600; color: var(--jp-ink-2); }
+.jp-artifact .jp-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 720px) { .jp-artifact .jp-panels, .jp-artifact .jp-tiles { grid-template-columns: 1fr; } }
+.jp-artifact .jp-panel { background: var(--jp-surface); border: 1px solid var(--jp-border); border-radius: 10px; padding: 16px 18px 12px; }
+.jp-artifact .jp-panel h2 { font-size: 13px; font-weight: 600; margin: 0 0 2px; color: var(--jp-ink); }
+.jp-artifact .jp-panel p.hint { font-size: 12px; color: var(--jp-ink-muted); margin: 0 0 10px; line-height: 1.4; }
+.jp-artifact svg.jp-chart { width: 100%; height: auto; overflow: visible; }
+.jp-artifact svg.jp-chart text { font-family: system-ui,-apple-system,"Segoe UI",sans-serif; fill: var(--jp-ink-2); }
+.jp-artifact .jp-grid-line { stroke: var(--jp-grid); stroke-width: 1; }
+.jp-artifact .jp-baseline { stroke: var(--jp-baseline); stroke-width: 1; }
+.jp-artifact .jp-bar { fill: var(--jp-series-1); }
+.jp-artifact .jp-bar-label { font-size: 11px; font-weight: 700; fill: var(--jp-ink); font-variant-numeric: tabular-nums; }
+.jp-artifact .jp-axis-label { font-size: 11px; fill: var(--jp-ink-muted); }
+.jp-artifact .jp-line-1 { stroke: var(--jp-series-1); stroke-width: 2; fill: none; }
+.jp-artifact .jp-line-2 { stroke: var(--jp-series-2); stroke-width: 2; fill: none; }
+.jp-artifact .jp-dot-1 { fill: var(--jp-series-1); }
+.jp-artifact .jp-dot-2 { fill: var(--jp-series-2); }
+.jp-artifact .jp-legend { display: flex; gap: 16px; font-size: 12px; color: var(--jp-ink-2); margin-top: 8px; }
+.jp-artifact .jp-legend .item { display: flex; align-items: center; gap: 6px; }
+.jp-artifact .jp-legend .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.jp-artifact .jp-tooltip { position: absolute; pointer-events: none; background: var(--jp-ink); color: var(--jp-page); font-size: 12px; padding: 6px 9px; border-radius: 6px; transform: translate(-50%,-130%); white-space: nowrap; opacity: 0; transition: opacity .1s; z-index: 5; font-variant-numeric: tabular-nums; }
+.jp-artifact .jp-chart-wrap { position: relative; }
+.jp-artifact table.jp-next-products { width: 100%; border-collapse: collapse; font-size: 13px; }
+.jp-artifact table.jp-next-products th { text-align: left; font-size: 11px; font-weight: 600; color: var(--jp-ink-muted); text-transform: uppercase; letter-spacing: .04em; padding: 0 10px 8px 0; border-bottom: 1px solid var(--jp-grid); }
+.jp-artifact table.jp-next-products td { padding: 8px 10px 8px 0; vertical-align: top; border-bottom: 1px solid var(--jp-grid); }
+.jp-artifact table.jp-next-products tr:last-child td { border-bottom: none; }
+.jp-artifact .jp-prod-row { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+.jp-artifact .jp-prod-name { flex: 1; color: var(--jp-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jp-artifact .jp-prod-bar-track { width: 64px; height: 6px; border-radius: 3px; background: var(--jp-surface-2); flex: none; overflow: hidden; }
+.jp-artifact .jp-prod-bar-fill { height: 100%; background: var(--jp-series-1); border-radius: 3px; }
+.jp-artifact .jp-prod-pct { width: 42px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; flex: none; }
+.jp-artifact .jp-prod-pct.same { color: var(--jp-series-1); }
+.jp-artifact tr.jp-linha-nao-voltou td { border-top: 1px dashed var(--jp-grid); border-bottom: none; padding-top: 10px; }
+.jp-artifact tr.jp-linha-nao-voltou .jp-prod-name { font-style: italic; color: var(--jp-ink-muted); }
+.jp-artifact tr.jp-linha-nao-voltou .jp-prod-pct { color: var(--jp-ink-muted); }
+.jp-artifact footer.jp-note { font-size: 12px; color: var(--jp-ink-muted); line-height: 1.6; padding-top: 4px; }
+.jp-artifact footer.jp-note code { background: var(--jp-surface-2); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
 </style>
 </head>
 <body>
@@ -729,16 +801,52 @@ tr.nested td:first-child{padding-left:36px;color:var(--muted)}
     </div>
   </div>
 
-  <div class="section-title">Tempo até a 2ª compra <span class="hint">entre clientes que já recompraram — quantos dias depois da 1ª compra</span></div>
-  <div class="grid grid-4" style="margin-bottom:14px">
-    <div class="card">
-      <div class="card-title"><span>80% das 2ªs compras acontecem em até</span></div>
-      <div class="kpi-value" id="rc-p80-dias">—</div>
-      <div class="delta" style="opacity:.75;font-weight:400">dias após a 1ª compra</div>
+  <div class="section-title">Jornada de Produto</div>
+  <div class="jp-artifact">
+    <div class="jp-inner">
+      <header class="jp-top">
+        <div class="eyebrow">Minimal Club &middot; Jornada de Produto</div>
+        <h1>Por onde o cliente entra, e o que ele compra depois</h1>
+        <p class="jp-sub">A partir de quem entrou comprando <strong>um produto só</strong> ou um dos <strong>combos aprovados</strong> (mín. 1.000 clientes na entrada), quais produtos aparecem nas compras seguintes &mdash; por <strong>presença</strong>, não pela classificação do carrinho inteiro (por isso as % de um passo podem somar mais de 100%: um pedido com 2 produtos conta pros 2).</p>
+      </header>
+
+      <div class="jp-banner"><span class="dot"></span> Atualizado manualmente a partir da base de 2026-07-23 &mdash; não é um cron contínuo.</div>
+
+      <div class="jp-controls">
+        <label for="jp-entrada">Produto de entrada</label>
+        <select id="jp-entrada"></select>
+      </div>
+
+      <div class="jp-tiles" id="jp-tiles"></div>
+
+      <div class="jp-panels">
+        <div class="jp-panel">
+          <h2>Retenção do produto de entrada</h2>
+          <p class="hint">% dos clientes cuja compra seguinte TEM o(s) produto(s) da entrada de novo (combo: os 2 precisam aparecer; pode vir mais coisa junto).</p>
+          <div class="jp-chart-wrap"><svg class="jp-chart" id="jp-chart-retencao" viewBox="0 0 400 220"></svg><div class="jp-tooltip" id="jp-tip-retencao"></div></div>
+        </div>
+        <div class="jp-panel">
+          <h2>Tempo até a próxima compra</h2>
+          <p class="hint">Mediana em dias — acumulado desde a entrada vs. intervalo desde a compra anterior.</p>
+          <div class="jp-chart-wrap"><svg class="jp-chart" id="jp-chart-tempo" viewBox="0 0 400 220"></svg><div class="jp-tooltip" id="jp-tip-tempo"></div></div>
+          <div class="jp-legend">
+            <div class="item"><span class="swatch" style="background:var(--jp-series-1)"></span>Acumulado desde a entrada</div>
+            <div class="item"><span class="swatch" style="background:var(--jp-series-2)"></span>Desde a compra anterior</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="jp-panel">
+        <h2>O que ofertar em cada passo</h2>
+        <p class="hint">Todos os produtos com pelo menos 30 clientes na etapa, em % da turma de entrada inteira &mdash; por isso a soma passa de 100% (pedido com 2 itens conta pros 2) e nenhum produto sozinho chega perto de 100% (a maioria da entrada nem voltou &mdash; linha de baixo). Destacado = faz parte da própria entrada.</p>
+        <div style="overflow-x:auto"><table class="jp-next-products" id="jp-tabela-produtos"></table></div>
+      </div>
+
+      <footer class="jp-note">
+        Fonte: tabelas <code>fact_jornada_metricas</code>, <code>vw_jornada_afinidade</code> e <code>fact_jornada_tempo</code> no Supabase, carregadas manualmente a partir da análise em <code>mc-growth/jornada_produto.py</code>.
+        Recente/ativo/inativo usa a mesma régua oficial de <code>fact_repurchase_monthly_metrics</code> (6/11 meses).
+      </footer>
     </div>
-  </div>
-  <div class="card">
-    <div class="chart-box lg"><canvas id="rc-chart-days-second"></canvas></div>
   </div>
 
 </section>
@@ -800,7 +908,7 @@ async function checkCronAlerts() {
 // =========================================
 // AUTENTICAÇÃO — Supabase Auth (magic link)
 // =========================================
-const AUTH_ENABLED = true;
+const AUTH_ENABLED = location.hostname !== 'localhost';
 let _userRole = 'view'; // preenchido após login: 'view' | 'edit' | 'admin'
 
 const ALLOWED_DOMAINS = ['@minimalclub.com.br', '@moonventures.com.br', '@hoomy.com.br'];
@@ -4501,12 +4609,6 @@ function initRecompraTab() {
     }
     return all;
   }
-  async function fetchDaysToSecondPurchase() {
-    const { data, error } = await _sb.from('vw_repurchase_days_to_second_histogram').select('*').order('dias');
-    if (error) throw error;
-    return data;
-  }
-
   function renderKpis() {
     const grid = document.getElementById('rc-kpi-grid');
     grid.innerHTML = '';
@@ -4723,69 +4825,281 @@ function initRecompraTab() {
     table.appendChild(tbody);
   }
 
-  function renderDaysToSecondPurchase(rows) {
-    const BIN_SIZE = 15;
-    const bins = {};
-    let overflowClientes = 0;
-    rows.forEach(r => {
-      if (r.dias >= 730) { overflowClientes += r.clientes; return; }
-      const binStart = Math.floor(r.dias / BIN_SIZE) * BIN_SIZE;
-      bins[binStart] = (bins[binStart] || 0) + r.clientes;
-    });
-    const binStarts = Object.keys(bins).map(Number).sort((a, b) => a - b);
-    const labels = binStarts.map(b => `${b}-${b + BIN_SIZE - 1}`);
-    const values = binStarts.map(b => bins[b]);
-    if (overflowClientes > 0) {
-      labels.push('730+');
-      values.push(overflowClientes);
+  // =========================================
+  // JORNADA DE PRODUTO — por onde entra, o que se compra depois. Visual e lógica de
+  // render portados 1:1 do rascunho local (mc-growth/_gerar_painel.py), só trocando os
+  // dados embutidos em JSON por fetch no Supabase (R11: dado vem pronto, JS só junta
+  // as 3 tabelas no formato que o render espera e desenha).
+  // =========================================
+  async function fetchJornadaMetricas() {
+    const { data, error } = await _sb.from('fact_jornada_metricas').select('*').order('n_clientes', { ascending: false });
+    if (error) throw error;
+    return data;
+  }
+  async function fetchJornadaAfinidade() {
+    // >1000 linhas na base inteira — pagina (mesmo padrão de fetchCohortMatrixAll)
+    const pageSize = 1000;
+    let offset = 0;
+    const all = [];
+    while (true) {
+      const { data, error } = await _sb.from('vw_jornada_afinidade').select('*').range(offset, offset + pageSize - 1);
+      if (error) throw error;
+      all.push(...data);
+      if (data.length < pageSize) break;
+      offset += pageSize;
     }
+    return all;
+  }
+  async function fetchJornadaTempo() {
+    const { data, error } = await _sb.from('fact_jornada_tempo').select('*');
+    if (error) throw error;
+    return data;
+  }
 
-    const p80Row = rows.find(r => r.pct_acumulado >= 80);
-    document.getElementById('rc-p80-dias').textContent = p80Row ? fmtInt(p80Row.dias) : '—';
+  // Pra combos, o "mesmo produto" que interessa mostrar é a linha que NÃO é Camiseta
+  // Minimal (o ponto da análise é medir o cross-sell dessa linha, não o autorrepeat da
+  // camiseta, que já aparece sozinho na tabela de baixo). Pra entrada solo, é a própria linha.
+  function jpPctMesmoProduto(linhasRequeridas, produtos) {
+    const alvo = linhasRequeridas.length > 1
+      ? (linhasRequeridas.find(l => l !== 'Camiseta Minimal') || linhasRequeridas[linhasRequeridas.length - 1])
+      : linhasRequeridas[0];
+    const p = produtos.find(pp => pp.produto === alvo);
+    return p ? p.pct : 0;
+  }
 
-    mkChart('rc-chart-days-second', {
-      type: 'bar',
-      data: { labels, datasets: [{
-        label: 'Clientes', data: values,
-        backgroundColor: '#2563eb', borderRadius: 3,
-      }]},
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            displayColors: false,
-            callbacks: {
-              title: items => items[0].label + ' dias',
-              label: c => fmtInt(c.parsed.y) + ' clientes',
-            }
-          }
-        },
-        scales: {
-          x: { grid: { display: false }, ticks: { font: { size: 9 }, maxRotation: 60, minRotation: 60, autoSkip: true, maxTicksLimit: 30 } },
-          y: { ticks: { callback: v => fmtInt(v) }, grid: { color: '#f1f4f8' } },
-        }
-      }
+  const JP_COMPRA_ORDER = ['2a', '3a', '4a', '5a'];
+
+  function buildJornadaDados(metricas, afinidade, tempo) {
+    const porEntradaCompra = {};
+    afinidade.forEach(r => {
+      porEntradaCompra[r.entrada] = porEntradaCompra[r.entrada] || {};
+      const bucket = (porEntradaCompra[r.entrada][r.compra] = porEntradaCompra[r.entrada][r.compra] || { produtos: [], n_base: r.n_base_da_compra });
+      bucket.produtos.push({ produto: r.produto, pct: r.pct_da_entrada });
     });
+    const temposPorEntrada = {};
+    tempo.forEach(r => {
+      (temposPorEntrada[r.entrada] = temposPorEntrada[r.entrada] || []).push({
+        compra: r.compra, clientes: r.clientes, acumulado: r.dias_acumulado_mediana, gap: r.dias_entre_recompras_mediana,
+      });
+    });
+
+    return metricas.map(m => {
+      const porCompra = porEntradaCompra[m.entrada] || {};
+      const compras = JP_COMPRA_ORDER.filter(c => porCompra[c]).map(c => {
+        const { produtos, n_base } = porCompra[c];
+        const sorted = produtos.slice().sort((a, b) => b.pct - a.pct);
+        return {
+          compra: c,
+          produtos: sorted,
+          pct_mesmo_produto: jpPctMesmoProduto(m.linhas_requeridas, sorted),
+          pct_nao_voltou: 100 - (n_base / m.n_clientes * 100),
+        };
+      });
+      const tempos = (temposPorEntrada[m.entrada] || [])
+        .slice()
+        .sort((a, b) => JP_COMPRA_ORDER.indexOf(a.compra) - JP_COMPRA_ORDER.indexOf(b.compra));
+      return {
+        nome: m.entrada, linhas_requeridas: m.linhas_requeridas, n: m.n_clientes,
+        compras, tempos,
+        ltv_180d_mediana: m.ltv_180d_mediana,
+        taxa_repeticao: m.taxa_repeticao,
+        taxa_reativacao: m.taxa_reativacao,
+        pct_recente_hoje: m.pct_recente_hoje,
+        pct_ativo_hoje: m.pct_ativo_hoje,
+        pct_inativo_hoje: m.pct_inativo_hoje,
+      };
+    });
+  }
+
+  function jpRot(compra) { return compra.replace('a', 'ª'); }
+
+  function jpRenderTiles(e) {
+    const c2 = e.compras.find(c => c.compra === '2a');
+    const t2 = e.tempos.find(t => t.compra === '2a');
+    const tiles = document.getElementById('jp-tiles');
+    const tileData = [
+      { label: 'Clientes com esta entrada', value: fmtInt(e.n) },
+      { label: 'Não voltaram (2ª compra)', value: c2 ? c2.pct_nao_voltou.toFixed(0) + '%' : '—' },
+      { label: 'Têm o mesmo produto de novo (2ª compra)', value: c2 ? c2.pct_mesmo_produto.toFixed(0) + '%' : '—' },
+      { label: 'Mediana até a 2ª compra', value: t2 ? t2.acumulado.toFixed(0) + ' <small>dias</small>' : '—' },
+      { label: 'LTV 180 dias (mediana)', value: fmtBRLfull(e.ltv_180d_mediana) },
+      { label: 'Taxa de repetição (alguma vez)', value: e.taxa_repeticao.toFixed(1) + '%' },
+      { label: 'Taxa de reativação (alguma vez)', value: e.taxa_reativacao.toFixed(1) + '%' },
+      { label: 'Status hoje: recente / ativo / inativo', value: e.pct_recente_hoje.toFixed(0) + '% <small>/</small> ' + e.pct_ativo_hoje.toFixed(0) + '% <small>/</small> ' + e.pct_inativo_hoje.toFixed(0) + '%' },
+    ];
+    tiles.innerHTML = tileData.map(t => `<div class="jp-tile"><div class="label">${t.label}</div><div class="value">${t.value}</div></div>`).join('');
+  }
+
+  function jpSvgEl(tag, attrs) {
+    const n = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    return n;
+  }
+
+  function jpShowTip(tip, svg, ev, text) {
+    const parent = svg.parentElement.getBoundingClientRect();
+    tip.textContent = text;
+    tip.style.left = (ev.clientX - parent.left) + 'px';
+    tip.style.top = (ev.clientY - parent.top) + 'px';
+    tip.style.opacity = 1;
+  }
+
+  function jpRenderRetencao(e) {
+    const svg = document.getElementById('jp-chart-retencao');
+    const tip = document.getElementById('jp-tip-retencao');
+    svg.innerHTML = '';
+    const W = 400, H = 220, padL = 30, padR = 10, padT = 10, padB = 28;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    const steps = e.compras.map(c => c.compra);
+    const vals = e.compras.map(c => c.pct_mesmo_produto);
+    const maxV = Math.max(10, ...vals) * 1.15;
+    const bw = plotW / steps.length;
+
+    for (let i = 0; i <= 3; i++) {
+      const y = padT + plotH - (plotH * i / 3);
+      svg.appendChild(jpSvgEl('line', { x1: padL, x2: W - padR, y1: y, y2: y, class: 'jp-grid-line' }));
+    }
+    svg.appendChild(jpSvgEl('line', { x1: padL, x2: W - padR, y1: padT + plotH, y2: padT + plotH, class: 'jp-baseline' }));
+
+    steps.forEach((s, i) => {
+      const v = vals[i];
+      const barH = (v / maxV) * plotH;
+      const x = padL + i * bw + bw * 0.22;
+      const w = bw * 0.56;
+      const y = padT + plotH - barH;
+      const rect = jpSvgEl('rect', { x, y, width: w, height: Math.max(barH, 2), rx: 4, ry: 4, class: 'jp-bar' });
+      rect.addEventListener('mousemove', ev => jpShowTip(tip, svg, ev, jpRot(s) + ' compra: ' + v.toFixed(1) + '% recompram ' + e.nome));
+      rect.addEventListener('mouseleave', () => tip.style.opacity = 0);
+      svg.appendChild(rect);
+      const lbl = jpSvgEl('text', { x: x + w / 2, y: y - 6, class: 'jp-bar-label', 'text-anchor': 'middle' });
+      lbl.textContent = v.toFixed(0) + '%';
+      svg.appendChild(lbl);
+      const axl = jpSvgEl('text', { x: x + w / 2, y: H - 8, class: 'jp-axis-label', 'text-anchor': 'middle' });
+      axl.textContent = jpRot(s);
+      svg.appendChild(axl);
+    });
+  }
+
+  function jpRenderTempo(e) {
+    const svg = document.getElementById('jp-chart-tempo');
+    const tip = document.getElementById('jp-tip-tempo');
+    svg.innerHTML = '';
+    const W = 400, H = 220, padL = 34, padR = 14, padT = 14, padB = 28;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    const rows = e.tempos;
+    if (!rows.length) return;
+    const maxV = Math.max(...rows.map(r => Math.max(r.acumulado, r.gap))) * 1.15;
+    const stepX = rows.length > 1 ? plotW / (rows.length - 1) : 0;
+
+    for (let i = 0; i <= 3; i++) {
+      const y = padT + plotH - (plotH * i / 3);
+      svg.appendChild(jpSvgEl('line', { x1: padL, x2: W - padR, y1: y, y2: y, class: 'jp-grid-line' }));
+    }
+    svg.appendChild(jpSvgEl('line', { x1: padL, x2: W - padR, y1: padT + plotH, y2: padT + plotH, class: 'jp-baseline' }));
+
+    function pathFor(key) {
+      return rows.map((r, i) => {
+        const x = padL + i * stepX;
+        const y = padT + plotH - (r[key] / maxV) * plotH;
+        return (i === 0 ? 'M' : 'L') + x + ',' + y;
+      }).join(' ');
+    }
+    svg.appendChild(jpSvgEl('path', { d: pathFor('acumulado'), class: 'jp-line-1' }));
+    svg.appendChild(jpSvgEl('path', { d: pathFor('gap'), class: 'jp-line-2' }));
+
+    rows.forEach((r, i) => {
+      const x = padL + i * stepX;
+      [['acumulado', 'jp-dot-1', 'Acumulado desde a entrada'], ['gap', 'jp-dot-2', 'Desde a compra anterior']].forEach(triple => {
+        const [key, cls, label] = triple;
+        const y = padT + plotH - (r[key] / maxV) * plotH;
+        const c = jpSvgEl('circle', { cx: x, cy: y, r: 4, class: cls });
+        c.addEventListener('mousemove', ev => jpShowTip(tip, svg, ev, jpRot(r.compra) + ' compra — ' + label + ': ' + r[key].toFixed(0) + ' dias'));
+        c.addEventListener('mouseleave', () => tip.style.opacity = 0);
+        svg.appendChild(c);
+      });
+      const axl = jpSvgEl('text', { x, y: H - 8, class: 'jp-axis-label', 'text-anchor': 'middle' });
+      axl.textContent = jpRot(r.compra);
+      svg.appendChild(axl);
+    });
+  }
+
+  function jpRenderTabela(e) {
+    const table = document.getElementById('jp-tabela-produtos');
+    const steps = e.compras.map(c => c.compra);
+    const thead = '<thead><tr>' + steps.map(s => '<th>' + jpRot(s) + ' compra</th>').join('') + '</tr></thead>';
+    const maxRows = Math.max(0, ...e.compras.map(c => c.produtos.length));
+    let rowsHtml = '';
+    for (let r = 0; r < maxRows; r++) {
+      rowsHtml += '<tr>';
+      e.compras.forEach(c => {
+        const p = c.produtos[r];
+        if (!p) { rowsHtml += '<td></td>'; return; }
+        const same = e.linhas_requeridas.includes(p.produto);
+        rowsHtml += '<td><div class="jp-prod-row">' +
+          `<div class="jp-prod-name" title="${p.produto}">${p.produto}</div>` +
+          `<div class="jp-prod-bar-track"><div class="jp-prod-bar-fill" style="width:${Math.min(100, p.pct * 1.3)}%"></div></div>` +
+          `<div class="jp-prod-pct ${same ? 'same' : ''}">${p.pct.toFixed(1)}%</div>` +
+          '</div></td>';
+      });
+      rowsHtml += '</tr>';
+    }
+    // Linha final: quem nem chegou a fazer essa compra — pra nunca parecer que os
+    // produtos "somam pouco" sem dizer por que (a maior parte é gente que não voltou).
+    rowsHtml += '<tr class="jp-linha-nao-voltou">';
+    e.compras.forEach(c => {
+      rowsHtml += '<td><div class="jp-prod-row">' +
+        '<div class="jp-prod-name">Não fez essa compra</div>' +
+        '<div class="jp-prod-bar-track"></div>' +
+        `<div class="jp-prod-pct">${c.pct_nao_voltou.toFixed(1)}%</div>` +
+        '</div></td>';
+    });
+    rowsHtml += '</tr>';
+    table.innerHTML = thead + '<tbody>' + rowsHtml + '</tbody>';
+  }
+
+  function jpRender(dados, idx) {
+    const e = dados[idx];
+    jpRenderTiles(e);
+    jpRenderRetencao(e);
+    jpRenderTempo(e);
+    jpRenderTabela(e);
+  }
+
+  async function loadJornadaProduto() {
+    const tiles = document.getElementById('jp-tiles');
+    tiles.innerHTML = '<div class="jp-tile" style="grid-column:1/-1">Carregando dados...</div>';
+    try {
+      const [metricas, afinidade, tempo] = await Promise.all([
+        fetchJornadaMetricas(), fetchJornadaAfinidade(), fetchJornadaTempo(),
+      ]);
+      const dados = buildJornadaDados(metricas, afinidade, tempo);
+      const sel = document.getElementById('jp-entrada');
+      sel.innerHTML = dados.map((e, i) => `<option value="${i}">${e.nome} (${fmtInt(e.n)} clientes)</option>`).join('');
+      sel.addEventListener('change', () => jpRender(dados, Number(sel.value)));
+      jpRender(dados, 0);
+    } catch (err) {
+      tiles.innerHTML = `<div class="jp-tile" style="grid-column:1/-1;color:var(--danger)">Erro ao carregar Jornada de Produto: ${err.message}</div>`;
+      console.error(err);
+    }
   }
 
   return (async function renderAll() {
     document.getElementById('rc-kpi-grid').innerHTML = '<div class="empty-note" style="grid-column:1/-1">Carregando dados...</div>';
     try {
-      let matrixRows, daysToSecondRows;
-      [MONTHLY, LTV, COHORT_SIZES, matrixRows, daysToSecondRows] = await Promise.all([
-        fetchMonthly(), fetchLtv(), fetchCohortSizes(), fetchCohortMatrixAll(), fetchDaysToSecondPurchase(),
+      let matrixRows;
+      [MONTHLY, LTV, COHORT_SIZES, matrixRows] = await Promise.all([
+        fetchMonthly(), fetchLtv(), fetchCohortSizes(), fetchCohortMatrixAll(),
       ]);
       renderRefMonthSelector();
       renderKpis();
       renderMetricSelector();
       document.getElementById('rc-f-cohort-view').addEventListener('change', () => renderCohortTable(LAST_MATRIX_ROWS, getRefMonth()));
       renderCohortTable(matrixRows, getRefMonth());
-      renderDaysToSecondPurchase(daysToSecondRows);
     } catch (err) {
       document.getElementById('rc-kpi-grid').innerHTML = `<div class="error-note" style="grid-column:1/-1">Erro ao carregar: ${err.message}</div>`;
       throw err;
     }
+    await loadJornadaProduto();
   })();
 }
 </script>

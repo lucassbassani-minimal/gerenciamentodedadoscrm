@@ -982,3 +982,58 @@ def upsert_chatflux_leads_diario(sb: Client, rows: list[ChatfluxLeadDiario]) -> 
         total += len(batch)
     logger.info({"event": "chatflux_leads_diario_upserted", "count": total})
     return total
+
+
+def replace_jornada_metricas(sb: Client, rows: list[dict]) -> int:
+    """Recarrega fact_jornada_metricas por completo (truncate + insert) — vem de uma
+    análise rodada manualmente (mc-growth/jornada_produto.py), não há upsert incremental."""
+    sb.table("fact_jornada_metricas").delete().neq("entrada", "__nunca__").execute()
+    if not rows:
+        return 0
+    now = _now_iso()
+    records = [{**r, "ingested_at": now} for r in rows]
+    sb.table("fact_jornada_metricas").insert(records).execute()
+    logger.info({"event": "jornada_metricas_loaded", "count": len(records)})
+    return len(records)
+
+
+def replace_jornada_afinidade(sb: Client, rows: list[dict]) -> int:
+    """Recarrega fact_jornada_afinidade por completo (truncate + insert)."""
+    sb.table("fact_jornada_afinidade").delete().neq("entrada", "__nunca__").execute()
+    if not rows:
+        return 0
+    now = _now_iso()
+    records = [{**r, "ingested_at": now} for r in rows]
+    batch_size = 1000
+    total = 0
+    for i in range(0, len(records), batch_size):
+        batch = records[i:i + batch_size]
+        sb.table("fact_jornada_afinidade").insert(batch).execute()
+        total += len(batch)
+    logger.info({"event": "jornada_afinidade_loaded", "count": total})
+    return total
+
+
+def replace_jornada_tempo(sb: Client, rows: list[dict]) -> int:
+    """Recarrega fact_jornada_tempo por completo (truncate + insert)."""
+    sb.table("fact_jornada_tempo").delete().neq("entrada", "__nunca__").execute()
+    if not rows:
+        return 0
+    now = _now_iso()
+    records = [{**r, "ingested_at": now} for r in rows]
+    sb.table("fact_jornada_tempo").insert(records).execute()
+    logger.info({"event": "jornada_tempo_loaded", "count": len(records)})
+    return len(records)
+
+
+def replace_jornada_arvore(sb: Client, rows: list[dict]) -> int:
+    """Recarrega fact_jornada_arvore por completo (truncate + insert). `arvore` já
+    chega como dict/list serializável (json.dumps na escrita do driver)."""
+    sb.table("fact_jornada_arvore").delete().neq("entrada", "__nunca__").execute()
+    if not rows:
+        return 0
+    now = _now_iso()
+    records = [{**r, "ingested_at": now} for r in rows]
+    sb.table("fact_jornada_arvore").insert(records).execute()
+    logger.info({"event": "jornada_arvore_loaded", "count": len(records)})
+    return len(records)
